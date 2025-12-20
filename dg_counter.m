@@ -1,6 +1,6 @@
-function pe_counter(counter,total)
+function dg_counter(counter,total)
 % SYNTAX:
-%   pe_counter(counter,total)
+%   dg_counter(counter,total)
 %
 % DESCRIPTION:
 %   Utility function displaying progress during iteratiions (e.g., Monte Carlo loops).
@@ -15,13 +15,7 @@ function pe_counter(counter,total)
 % OUTPUT:
 %   (none; prints to command window)
 %
-% EXAMPLE:
-%   for itIdx = 1:nIterations
-%       % ... do work ...
-%       po_counter(itIdx, nIterations);
-%   end
-%
-% NOTE: function used in both PhysioExplorer and Polar
+% NOTE: function used in both Diagonale and Polar
 %
 % AUTHOR:
 %   Germano Gallicchio (germano.gallicchio@gmail.com)

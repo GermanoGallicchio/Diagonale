@@ -1,8 +1,8 @@
-function designCode = pe_parseDesign(pe_cfg, L)
+function designCode = dg_parseDesign(dg_cfg, L)
 % deduces from the information what design the user wants to do 
 
 % INPUT:
-%   pe_cfg
+%   dg_cfg
 %
 %   L
 %
@@ -16,7 +16,7 @@ function designCode = pe_parseDesign(pe_cfg, L)
 
 %% sanity checks
 
-designTbl_varLbl = pe_cfg.designTbl.Properties.VariableNames;
+designTbl_varLbl = dg_cfg.designTbl.Properties.VariableNames;
 
 % design table must include one subjID column
 if ~any(contains(designTbl_varLbl,'subjID'))
@@ -35,77 +35,32 @@ end
 
 %% put all information on the table
 
-nIterations = pe_cfg.nIterations;
-nRow = height(pe_cfg.designTbl);
+nIterations = dg_cfg.nIterations;
+nRow = height(dg_cfg.designTbl);
 
 % num of unique subjects
-[unique_subjID,~,subjIdxPerRow] = unique(pe_cfg.designTbl.subjID,'stable');
+[unique_subjID,~,subjIdxPerRow] = unique(dg_cfg.designTbl.subjID,'stable');
 nUnique_subjID = length(unique_subjID);
 
 % num of subjID repeats
 nRepeats_subjID = nRow / nUnique_subjID;
 
 % unique groups
-unique_groupID = string(unique(pe_cfg.designTbl.groupID,'stable'));
+unique_groupID = string(unique(dg_cfg.designTbl.groupID,'stable'));
 nUnique_groupID = length(unique_groupID);
 
 % num of repeated-measure levels factors
-rmF_col_idx = contains(pe_cfg.designTbl.Properties.VariableNames,'rmFactor');
+rmF_col_idx = contains(dg_cfg.designTbl.Properties.VariableNames,'rmFactor');
 nUnique_RMFactors = nnz(rmF_col_idx);
 nUnique_RMLevelsPerFactors = nan(1,nUnique_RMFactors);
 colCounter = 0;
 for rmIdx = find(rmF_col_idx)
     colCounter = colCounter + 1;
-    nUnique_RMLevelsPerFactors(1,colCounter) = length(unique(pe_cfg.designTbl{:,rmIdx}));
+    nUnique_RMLevelsPerFactors(1,colCounter) = length(unique(dg_cfg.designTbl{:,rmIdx}));
 end
 nUnique_RMLevels = prod(nUnique_RMLevelsPerFactors);
 
-designTbl = pe_cfg.designTbl;
-
-
-% --- DELETE THIS SECTION (UNNEEDED) --- 
-% 
-% % num of repeated-measure levels factors
-% rmF_col_idx = contains(pe_cfg.designTbl.Properties.VariableNames,'rmFactor');
-% nUnique_RMFactors = nnz(rmF_col_idx);
-% nUnique_RMLevelsPerFactors = nan(1,nUnique_RMFactors);
-% colCounter = 0;
-% for rmIdx = find(rmF_col_idx)
-%     colCounter = colCounter + 1;
-%     nUnique_RMLevelsPerFactors(1,colCounter) = length(unique(pe_cfg.designTbl{:,rmIdx}));
-% end
-% nUnique_RMLevels = prod(nUnique_RMLevelsPerFactors);
-% 
-% % num of columns of L 
-% nLCol = size(L,2);
-% 
-% nIterations = pe_cfg.nIterations;
-% nRow = height(pe_cfg.designTbl);
-% 
-% % num of unique subjects
-% [unique_subjID,~,subjIdxPerRow] = unique(pe_cfg.designTbl.subjID,'stable');
-% nUnique_subjID = length(unique_subjID);
-% 
-% % num of subjID repeats
-% nRepeats_subjID = nRow / nUnique_subjID;
-% 
-% % unique groups
-% unique_groupID = string(unique(pe_cfg.designTbl.groupID,'stable'));
-% nUnique_groupID = length(unique_groupID);
-% 
-% % num of repeated-measure levels factors
-% rmF_col_idx = contains(pe_cfg.designTbl.Properties.VariableNames,'rmFactor');
-% nUnique_RMFactors = nnz(rmF_col_idx);
-% nUnique_RMLevelsPerFactors = nan(1,nUnique_RMFactors);
-% colCounter = 0;
-% for rmIdx = find(rmF_col_idx)
-%     colCounter = colCounter + 1;
-%     nUnique_RMLevelsPerFactors(1,colCounter) = length(unique(pe_cfg.designTbl{:,rmIdx}));
-% end
-% nUnique_RMLevels = prod(nUnique_RMLevelsPerFactors);
-% 
-% designTbl = pe_cfg.designTbl;
-% --- 
+designTbl = dg_cfg.designTbl;
 
 %% sanity checks
 
@@ -116,7 +71,7 @@ end
 
 %% deduct intended design
 
-designOptions = pe_designOptions;
+designOptions = dg_designOptions;
 
 if nRepeats_subjID==1
     if nUnique_groupID<=1
@@ -155,7 +110,7 @@ end
 
 %% plot structure of L
 
-if pe_cfg.figFlag
+if dg_cfg.figFlag
     figure()
     imagesc(normalize(L,'range',[-1 1]))
     title('structure of L')
@@ -166,13 +121,8 @@ if pe_cfg.figFlag
 
 end
 
-%fprintf(['intended design: \n' design '\n'])
-
-%% sanity checks on R
-% TO DO ONE DAY but not essential. It's the user's responsibility to prepare the matrices (e.g., mean center appropriately, mainly for PLS-SVD)
-
 %% 
-if pe_cfg.verbose
+if dg_cfg.verbose
     rowIdx = (designOptions{:,"codeDec"}==bin2dec(num2str(designCode)))';
     fprintf(['\n' 'Design num is: ' num2str(designOptions{rowIdx,"codeDec"}) ', ' designOptions{rowIdx,"lbl"}{1} '\n'])
 end

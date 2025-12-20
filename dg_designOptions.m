@@ -1,14 +1,5 @@
-function designOptions = pe_designOptions()
+function designOptions = dg_designOptions()
 % deduces from the information what design the user wants to do 
-
-% INPUT:
-%
-% none
-%
-%
-% OUTPUT:
-%
-%
 
 % Author: Germano Gallicchio (germano.gallicchio@gmail.com)
 
@@ -48,6 +39,3 @@ for rIdx = 1:size(designOptions,1)
     designOptions{rIdx,"codeDec"} = bin2dec(char(designOptions.codeBin(rIdx,:)));
 end
 designOptions = sortrows(designOptions(:,[3 1 2]),"codeDec");
-
-% store this as an m file for later access
-%writetable(designOptions, [PEpath 'designOptions.csv'])

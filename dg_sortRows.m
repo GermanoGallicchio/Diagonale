@@ -1,12 +1,11 @@
-function [L, R] = pe_sortRows(pe_cfg,L_orig,R_orig,rowIdx,itIdx)
+function [L, R] = dg_sortRows(dg_cfg,L_orig,R_orig,rowIdx,itIdx)
 
 % INPUT:
 %   L           - 
 %
 %   R           - 
 %
-%   pe_cfg
-%
+%   dg_cfg
 %
 % OUTPUT:
 %
@@ -16,12 +15,12 @@ function [L, R] = pe_sortRows(pe_cfg,L_orig,R_orig,rowIdx,itIdx)
 
 
 %% sort rows as appropriate
-switch pe_cfg.objective
+switch dg_cfg.objective
     case 'permutationH0testing'
         % either permute L or R
         % it's faster to permute L's rows (fewer columns) but with
         % rmFactors we need to permute R's rows
-        switch num2str(pe_cfg.designCode)
+        switch num2str(dg_cfg.designCode)
             case num2str([0 0 1])
                 L(:,:) = L_orig;
                 R(:,:) = R_orig(rowIdx(:,itIdx),:); % permute rows of R

@@ -1,4 +1,4 @@
-# _PhysioExplorer_ for MATLAB
+# _Diagonale_ for MATLAB (formerly PhysioExplorer)
 
 Author: Germano Gallicchio, [Bangor University](https://www.bangor.ac.uk/)
 
@@ -15,7 +15,7 @@ Not yet available.
 
 ## Documentation
 
-Documentation for PhysioExplorer is available at this (link)[https://germanogallicchio.github.io/PhysioExplorer_documentation/index.html]
+Documentation for Diagonale is available at this (link)[https://germanogallicchio.github.io/PhysioExplorer_documentation/index.html]
 
 
 
@@ -40,12 +40,12 @@ Not yet available.
 
 ## How to cite
 
-Gallicchio, G. (2025). PhysioExplorer. Zenodo. [https://doi.org/10.5281/zenodo.16808782](https://doi.org/10.5281/zenodo.16808782)
+Gallicchio, G. (2025). Diagonale (formerly PhysioExplorer). Zenodo. [https://doi.org/10.5281/zenodo.16808782](https://doi.org/10.5281/zenodo.16808782)
 
 ---
 
 ## Overview
-**PhysioExplorer (PE)** is a set of functions to extract patterns from multivariate physiological data. 
+**Diagonale (DG)** is a set of functions to extract patterns from multivariate physiological data. 
 
 Testing effects on datasets with many and correlated variables (i.e., multivariate)--or even much larger than the number of observations (i.e., megavariate, Eriksson et al., 2013)--can be challenging due to the multiple comparison problem. (See the [green jelly bean comic](https://xkcd.com/882).) This challenge can be overcome through various approaches.
 1. One solution is to run mass (i.e., a lot of) univariate tests and then correct for False Discovery Rate (e.g., Benjamini & Hochberg, 1995).
@@ -54,7 +54,7 @@ Testing effects on datasets with many and correlated variables (i.e., multivaria
 
 If hypothesis testing is not the goal, but rather stability of the statistical metric across sampling variability, the bootstrap framework provides such metrics.
 
-## What PE's current version can do
+## What DG's current version can do
 [X] = PE can do it
 <br>
 [ ] = PE cannot _yet_ do it
@@ -72,11 +72,11 @@ If hypothesis testing is not the goal, but rather stability of the statistical m
 
 
 ## Referencing: <br>
-If you use PhysioExplorer, please cite the Zenodo DOI
+If you use Diagonale, please cite the Zenodo DOI
 
 Example:
 
-Gallicchio, G. (2025). PhysioExplorer. Zenodo. [https://doi.org/10.5281/zenodo.16808782](https://doi.org/10.5281/zenodo.16808782)
+Gallicchio, G. (2025). Diagonale (formerly PhysioExplorer). Zenodo. [https://doi.org/10.5281/zenodo.16808782](https://doi.org/10.5281/zenodo.16808782)
 
 ---
 
