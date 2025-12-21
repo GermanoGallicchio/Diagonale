@@ -1,38 +1,83 @@
-function [adjMatrix] = dg_adjacency(dg_cfg, figFlag)
-% Creates an adjacency vector for 3D physiological data
+function [adjMatrix] = dg_adjacency(dg_cfg)
+% Creates an adjacency matrix for multi-dimensional physiological data
 %
-% generates a sparse adjacency vector describing neighborhood relationships
-% across three vectorized dimensions: y1, x2, and z3.
+% Generates a sparse adjacency matrix describing neighborhood relationships
+% across any number of continuous dimensions and optionally one spherical dimension.
+% 
+% Criterion 1: Euclidean distance over all continuous dimensions
+% Criterion 2: Angular distance over spherical dimension (if present)
+% Categorical dimensions are not supported for adjacency computation.
 % 
 % INPUT: 
-%       dg_cfg
+%       dg_cfg - Configuration structure with dimensions and clusterParams
 %
 % OUTPUT:
-%       adjMatrix - Sparse N×N adjacency matrix where N = ny1*nx2*nz3
+%       adjMatrix - Sparse N×N adjacency matrix where N = product of all dimension sizes
 %                  Elements are 1 where points are considered "adjacent"
 %                  and might join the same cluster, 0 otherwise
 
 %% input sanity checks
 
-fieldNeeded = 'clusterParams';
-if ~any(contains(fieldnames(dg_cfg),fieldNeeded))
-    error(['dg_cfg needs field: ' fieldNeeded])
+if ~isfield(dg_cfg.analysis,'clusterParams')
+    error('dg_cfg.analysis.clusterParams needed')
 end
+
 
 %% shortcuts 
 
-ny1 = dg_cfg.dimensions.y1_num;
-nx2 = dg_cfg.dimensions.x2_num;
-nz3 = dg_cfg.dimensions.z3_num;
-Nall = ny1*nx2*nz3;
+% Extract dimensions in d# order (fieldnames order)
+dimKeys = fieldnames(dg_cfg.dimensions);
+dimTypes = cellfun(@(k) dg_cfg.dimensions.(k).type, dimKeys, 'UniformOutput', false);
+dimSizes = cellfun(@(k) length(dg_cfg.dimensions.(k).vec), dimKeys);
+nDims = numel(dimKeys);
 
-distance_y1x2_euclidean = dg_cfg.clusterParams.distance_y1x2_euclidean^2; % squared for speed
-distance_z3_angular = dg_cfg.clusterParams.distance_z3_angular;
-z3_distanceMatrix = dg_cfg.clusterParams.z3_distanceMatrix;
+% Identify dimension types
+contIdx = find(strcmp(dimTypes, 'continuous'));
+sphIdx = find(strcmp(dimTypes, 'spherical'));
+catIdx = find(strcmp(dimTypes, 'categorical'));
+
+% Check for categorical dimensions (not supported in adjacency)
+if ~isempty(catIdx)
+    error('Adjacency cannot be computed for categorical dimensions');
+end
+
+% Total number of points
+Nall = prod(dimSizes);
+
+% Distance thresholds
+distance_cont_euclid_sq = dg_cfg.analysis.clusterParams.distance_continuous_index^2;
+
+% Handle spherical dimension if present
+if ~isempty(sphIdx)
+    distance_chan_angular = dg_cfg.analysis.clusterParams.distance_spherical_radians;
+    % Channel angular distance matrix (compute if absent)
+    if isfield(dg_cfg.analysis.clusterParams,'sphericalDistanceMatrix')
+        sphericalDistanceMatrix = dg_cfg.analysis.clusterParams.sphericalDistanceMatrix;
+    else
+        sphericalDistanceMatrix = dg_sphericalDistance(dg_cfg);
+        dg_cfg.analysis.clusterParams.sphericalDistanceMatrix = sphericalDistanceMatrix;
+    end
+else
+    distance_chan_angular = [];
+    sphericalDistanceMatrix = [];
+end
 
 %% additional data
 
-[y1Matrix, x2Matrix, z3Matrix] = ndgrid(1:ny1,1:nx2,1:nz3);
+% Create coordinate grids for all dimensions
+gridArgs = cell(1, nDims);
+for dimIdx = 1:nDims
+    gridArgs{dimIdx} = 1:dimSizes(dimIdx);
+end
+dimGrids = cell(1, nDims);
+[dimGrids{:}] = ndgrid(gridArgs{:});
+
+% Prepare spherical grid if present
+if ~isempty(sphIdx)
+    sphGrid = dimGrids{sphIdx(1)};
+else
+    sphGrid = [];
+end
 
 %% choose approach to implementation
 
@@ -50,13 +95,29 @@ switch sparseApproach
         adjMatrix_logical = false(Nall,Nall); 
 
         for pIdx = 1:Nall
-            [pnt_y1, pnt_x2, pnt_z3] = ind2sub([ny1 nx2 nz3], pIdx);
+            subs = cell(1, nDims);
+            [subs{:}] = ind2sub(dimSizes, pIdx);
 
-            criterion1 = (y1Matrix-pnt_y1).^2 + (x2Matrix-pnt_x2).^2 <= distance_y1x2_euclidean;
-            chanNeighIdx = find(z3_distanceMatrix(pnt_z3,:) <= distance_z3_angular);
-            criterion2 = ismember(z3Matrix,chanNeighIdx);
+            % Euclidean criterion across continuous dimensions
+            if isempty(contIdx)
+                criterion1 = true(size(dimGrids{1}));
+            else
+                distSq = zeros(size(dimGrids{1}));
+                for c = contIdx
+                    distSq = distSq + (dimGrids{c} - subs{c}).^2;
+                end
+                criterion1 = distSq <= distance_cont_euclid_sq;
+            end
 
-            adjMatrix_logical(pIdx,:) = reshape(criterion1 & criterion2,[1 ny1*nx2*nz3]);
+            % Angular criterion for spherical dimension (if present)
+            if ~isempty(sphIdx)
+                chanNeighIdx = find(sphericalDistanceMatrix(subs{sphIdx(1)}, :) <= distance_chan_angular);
+                criterion2 = ismember(sphGrid, chanNeighIdx);
+            else
+                criterion2 = true(size(dimGrids{1}));
+            end
+
+            adjMatrix_logical(pIdx,:) = reshape(criterion1 & criterion2,[1, Nall]);
 
             if pIdx==1
                 disp('computing the adjacency matrix')
@@ -73,11 +134,27 @@ switch sparseApproach
         b_idx = [];
 
         for pIdx = 1:Nall
-            [pnt_y1, pnt_x2, pnt_z3] = ind2sub([ny1 nx2 nz3], pIdx);
+            subs = cell(1, nDims);
+            [subs{:}] = ind2sub(dimSizes, pIdx);
 
-            criterion1 = (y1Matrix-pnt_y1).^2 + (x2Matrix-pnt_x2).^2 <= distance_y1x2_euclidean;
-            chanNeighIdx = find(z3_distanceMatrix(pnt_z3,:) <= distance_z3_angular);
-            criterion2 = ismember(z3Matrix,chanNeighIdx);
+            % Euclidean criterion across continuous dimensions
+            if isempty(contIdx)
+                criterion1 = true(size(dimGrids{1}));
+            else
+                distSq = zeros(size(dimGrids{1}));
+                for c = contIdx
+                    distSq = distSq + (dimGrids{c} - subs{c}).^2;
+                end
+                criterion1 = distSq <= distance_cont_euclid_sq;
+            end
+
+            % Angular criterion for spherical dimension (if present)
+            if ~isempty(sphIdx)
+                chanNeighIdx = find(sphericalDistanceMatrix(subs{sphIdx(1)}, :) <= distance_chan_angular);
+                criterion2 = ismember(sphGrid, chanNeighIdx);
+            else
+                criterion2 = true(size(dimGrids{1}));
+            end
 
             criteria = criterion1 & criterion2;
             criteria_idx = find(criteria);
@@ -97,46 +174,47 @@ switch sparseApproach
 end
 
 %% adjacency matrix figure
-if dg_cfg.figFlag
+if dg_cfg.analysis.figFlag
     figure()
     spy(adjMatrix)
-    xlabel('all dimensions ny1*nx2*nz3')
-    ylabel('all dimensions ny1*nx2*nz3')
-    title('adjacency matrix in y1x2z3 space')
+    xlabel('vectorized points')
+    ylabel('vectorized points')
+    title('adjacency matrix over all dimensions')
     f = gcf;
     f.Units = 'normalized';
     f.Position = [0.6 0.6 0.3 0.3];
 end
 
-%% fig proximity
+%% fig proximity (first two continuous dimensions)
 
-if dg_cfg.figFlag
-    distMatrix_halfExtent = 3; 
-    if ny1>1
-        if nx2>1
-            [distMatrix_y1, distMatrix_x2] = ndgrid(-distMatrix_halfExtent:distMatrix_halfExtent,-distMatrix_halfExtent:distMatrix_halfExtent);
-        else
-            [distMatrix_y1, distMatrix_x2] = ndgrid(-distMatrix_halfExtent:distMatrix_halfExtent,0);
-        end
+if dg_cfg.analysis.figFlag && ~isempty(contIdx)
+    distMatrix_halfExtent = dg_cfg.analysis.clusterParams.distance_continuous_index + 1;
+
+    if numel(contIdx) >= 2
+        [distMatrix_dim1, distMatrix_dim2] = ndgrid(-distMatrix_halfExtent:distMatrix_halfExtent, -distMatrix_halfExtent:distMatrix_halfExtent);
+        dimLabel1 = dimKeys{contIdx(2)};
+        dimLabel2 = dimKeys{contIdx(1)};
+        
     else
-        if nx2>1
-            [distMatrix_y1, distMatrix_x2] = ndgrid(0,-distMatrix_halfExtent:distMatrix_halfExtent);
-        else
-            [distMatrix_y1, distMatrix_x2] = 0;
-        end
+        [distMatrix_dim1, distMatrix_dim2] = ndgrid(0,-distMatrix_halfExtent:distMatrix_halfExtent);
+        dimLabel1 = 'constant';
+        dimLabel2 = dimKeys{contIdx(1)};
+        
     end
-    distMatrix_val = sqrt(distMatrix_y1.^2 + distMatrix_x2.^2);
+
+    distMatrix_val = sqrt(distMatrix_dim1.^2 + distMatrix_dim2.^2);
     distMatrix_val_thresholded = zeros(size(distMatrix_val));
-    distMatrix_val_thresholded(distMatrix_val <= distance_y1x2_euclidean) = 1;
+    distMatrix_val_thresholded(distMatrix_val <= sqrt(distance_cont_euclid_sq)) = 1;
     [~, minIdx] = min(distMatrix_val(:));
     distMatrix_val_thresholded(minIdx) = 2;
+
     figure(); clf
     f = gcf; f.Units = 'normalized'; f.Position = [0.6    0.05   0.24    0.4];
     imagesc(distMatrix_val_thresholded)
-    xlabel('dimension 1');
+    xlabel(dimLabel2);
     set(gca, 'XTick', 0.5:1:size(distMatrix_val, 2)+0.5)
     set(gca, 'XTickLabel', [])
-    ylabel('dimension 2');
+    ylabel(dimLabel1);
     set(gca, 'YTick', 0.5:1:size(distMatrix_val, 1)+0.5)
     set(gca, 'YTickLabel', [])
     grid on; 
@@ -149,7 +227,7 @@ if dg_cfg.figFlag
                 case 0
                     textStr = sprintf('%d', distMatrix_val(rowIdx, colIdx));
                 otherwise
-                    textStr = sprintf('√%d', distMatrix_y1(rowIdx, colIdx)^2 + distMatrix_x2(rowIdx, colIdx)^2);
+                    textStr = sprintf('√%d', distMatrix_dim1(rowIdx, colIdx)^2 + distMatrix_dim2(rowIdx, colIdx)^2);
             end
             switch distMatrix_val_thresholded(rowIdx,colIdx)
                 case 0
@@ -162,7 +240,7 @@ if dg_cfg.figFlag
                 'Color', textCol, 'FontSize', 10, 'FontWeight', 'normal');
         end
     end
-    sgtitle(sprintf('cluster search area (threshold ≤ %d)', distance_y1x2_euclidean), 'FontWeight', 'normal');
+    sgtitle(sprintf('cluster search area (threshold ≤ %.3g)', sqrt(distance_cont_euclid_sq)), 'FontWeight', 'normal');
     f2 = gcf; f2.Units = 'normalized'; f2.Position = [0.5 0.05 0.4 0.4];
 end
 
