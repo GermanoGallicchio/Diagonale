@@ -81,5 +81,9 @@ for dIdx = 1:length(dims)
     dg_cfg.dimensions.(dims{dIdx}).num = nVec;
 end
 
+
+% add a validated flag
+dg_cfg.validation.dimensions = true;
+
 disp('Diagonale: dimensions validated')
 end
