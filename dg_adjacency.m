@@ -1,8 +1,14 @@
 function [adjMatrix] = dg_adjacency(dg_cfg)
-% Creates an adjacency matrix for multi-dimensional physiological data
-%
-% Generates a sparse adjacency matrix describing neighborhood relationships
-% across any number of continuous dimensions and optionally one spherical dimension.
+% Create an adjacency matrix for multi-dimensional data based on
+% continuity/neighborhood along dimensions in the data, which can only be
+% defined for continuous dimensions (e.g., time) or spherical (e.g., EEG
+% channels). Using information about the dimensions (see
+% dg_validateDimensions), it creates a (sparse) adjacency matrix describing
+% continuity/neighborhood across a vectorized pool of all levels of all
+% dimensions (i.e., all levels vs all levels). 1=neighbor, 0=not neighbor.
+% Having an adjacency matrix is essential for the cluster forming
+% algorithm, which will not waste a huge amount of time checking whether
+% far away points are in the same cluster.
 % 
 % Criterion 1: Euclidean distance over all continuous dimensions
 % Criterion 2: Angular distance over spherical dimension (if present)
@@ -14,14 +20,18 @@ function [adjMatrix] = dg_adjacency(dg_cfg)
 % OUTPUT:
 %       adjMatrix - Sparse N×N adjacency matrix where N = product of all dimension sizes
 %                  Elements are 1 where points are considered "adjacent"
-%                  and might join the same cluster, 0 otherwise
+%                  and might join the same cluster (they are candidate in
+%                  the cluster forming algorithm), 0 otherwise
 
 %% input sanity checks
+
+if ~isfield(dg_cfg,'dimensions')
+    error('dg_cfg.dimensions needed')
+end
 
 if ~isfield(dg_cfg.analysis,'clusterParams')
     error('dg_cfg.analysis.clusterParams needed')
 end
-
 
 %% shortcuts 
 
@@ -36,7 +46,9 @@ contIdx = find(strcmp(dimTypes, 'continuous'));
 sphIdx = find(strcmp(dimTypes, 'spherical'));
 catIdx = find(strcmp(dimTypes, 'categorical'));
 
-% Check for categorical dimensions (not supported in adjacency)
+% sanity check categorical dimensions (not supported in adjacency)
+% TO DO (maybe.. or not) in future allow adjacency for the other dimensions (to work
+% for each level of the categorical dimension(s))
 if ~isempty(catIdx)
     error('Adjacency cannot be computed for categorical dimensions');
 end
@@ -44,47 +56,52 @@ end
 % Total number of points
 Nall = prod(dimSizes);
 
-% Distance thresholds
-distance_cont_euclid_sq = dg_cfg.analysis.clusterParams.distance_continuous_index^2;
-
-% Handle spherical dimension if present
-if ~isempty(sphIdx)
-    distance_chan_angular = dg_cfg.analysis.clusterParams.distance_spherical_radians;
-    % Channel angular distance matrix (compute if absent)
-    if isfield(dg_cfg.analysis.clusterParams,'sphericalDistanceMatrix')
-        sphericalDistanceMatrix = dg_cfg.analysis.clusterParams.sphericalDistanceMatrix;
-    else
-        sphericalDistanceMatrix = dg_sphericalDistance(dg_cfg);
-        dg_cfg.analysis.clusterParams.sphericalDistanceMatrix = sphericalDistanceMatrix;
-    end
+% distance thresholds
+% continuous dimensios, if present
+if ~isempty(contIdx)
+    distance_cont_euclid_sq = dg_cfg.analysis.clusterParams.distance_continuous_index^2; % it's faster because it avoid the sqrt() later
 else
-    distance_chan_angular = [];
+    distance_cont_euclid_sq = [];
+end
+% spherical dimension, if present
+if ~isempty(sphIdx)
+    distance_spherical_radians = dg_cfg.analysis.clusterParams.distance_spherical_radians;
+    sphericalDistanceMatrix    = dg_cfg.analysis.clusterParams.sphericalDistanceMatrix;
+else
+    distance_spherical_radians = [];
     sphericalDistanceMatrix = [];
 end
 
 %% additional data
 
-% Create coordinate grids for all dimensions
-gridArgs = cell(1, nDims);
+% coordinate grids for all dimensions
+dimVecIdxCell = cell(1, nDims); % initialize cell with sizes per dimension
 for dimIdx = 1:nDims
-    gridArgs{dimIdx} = 1:dimSizes(dimIdx);
+    dimVecIdxCell{dimIdx} = 1:dimSizes(dimIdx);
 end
 dimGrids = cell(1, nDims);
-[dimGrids{:}] = ndgrid(gridArgs{:});
+[dimGrids{:}] = ndgrid(dimVecIdxCell{:});
 
-% Prepare spherical grid if present
-if ~isempty(sphIdx)
-    sphGrid = dimGrids{sphIdx(1)};
-else
-    sphGrid = [];
-end
+% % prepare spherical grid if present  // DELETE
+% if ~isempty(sphIdx)
+%     sphGrid = dimGrids{sphIdx(1)};
+% else
+%     sphGrid = [];
+% end
 
 %% choose approach to implementation
 
+
 if Nall < 100000
-    sparseApproach = 'fromLogical'; 
+    sparseApproach = 'fromLogical';
+    % this was the first-ish approach
+    % it creates first a logical N x N matrix, fills it, then convert it to sparse
+    % it fails for large N at the first step, but otherwise it's faster for small N only
+
 else
     sparseApproach = 'fromIdx';
+    % it creates sparse matrix from indices
+    % idx approach is less memory intensive, but slower
 end
 
 %% implementation
@@ -92,33 +109,42 @@ end
 switch sparseApproach
     case 'fromLogical'
 
-        adjMatrix_logical = false(Nall,Nall); 
+        adjMatrix_logical = false(Nall,Nall); % initialize
 
+        % loop through each point and find its adjacent across all dimensions
         for pIdx = 1:Nall
-            subs = cell(1, nDims);
-            [subs{:}] = ind2sub(dimSizes, pIdx);
 
-            % Euclidean criterion across continuous dimensions
-            if isempty(contIdx)
-                criterion1 = true(size(dimGrids{1}));
-            else
-                distSq = zeros(size(dimGrids{1}));
-                for c = contIdx
-                    distSq = distSq + (dimGrids{c} - subs{c}).^2;
+            % find the coordinates in the multidimensional grid for point pIdx
+            pIdx_subs = cell(1, nDims);
+            [pIdx_subs{:}] = ind2sub(dimSizes, pIdx);
+
+            % adjacency along all continuous dimensions, if present
+            % Euclidean distance between indices (not physical units)
+            if ~isempty(contIdx)
+                distSq = zeros(size(dimGrids{1})); % initialize
+                for contDimIdx = contIdx
+                    distSq = distSq + (dimGrids{contDimIdx} - pIdx_subs{contDimIdx}).^2;
                 end
                 criterion1 = distSq <= distance_cont_euclid_sq;
+            else
+                criterion1 = true(size(dimGrids{1}));
             end
 
-            % Angular criterion for spherical dimension (if present)
+            % adjacency along the pherical dimension, if present
+            % angular distance using angular distance matrix
             if ~isempty(sphIdx)
-                chanNeighIdx = find(sphericalDistanceMatrix(subs{sphIdx(1)}, :) <= distance_chan_angular);
-                criterion2 = ismember(sphGrid, chanNeighIdx);
+                seedChanIdx = pIdx_subs{sphIdx(1)};
+                chanNeighIdx = find(sphericalDistanceMatrix(seedChanIdx, :) <= distance_spherical_radians);
+                %chanNeighLbl =
+                %dg_cfg.dimensions.(dimKeys{sphIdx}).vec(chanNeighIdx);  % just for curiosity
+                criterion2 = ismember(dimGrids{sphIdx}, chanNeighIdx);
             else
                 criterion2 = true(size(dimGrids{1}));
             end
 
+            % nnz(criterion1 & criterion2); % just for curiosity
             adjMatrix_logical(pIdx,:) = reshape(criterion1 & criterion2,[1, Nall]);
-
+            
             if pIdx==1
                 disp('computing the adjacency matrix')
             end
@@ -126,31 +152,34 @@ switch sparseApproach
         end
         
         adjMatrix = sparse(adjMatrix_logical);
-        clear adjMatrix_logical
+        clear adjMatrix_logical % to save memory
 
     case 'fromIdx'
+
+% TO DO: double check this still works after the diagonale change with
+% multiple dimensions
 
         a_idx = [];
         b_idx = [];
 
         for pIdx = 1:Nall
-            subs = cell(1, nDims);
-            [subs{:}] = ind2sub(dimSizes, pIdx);
+            pIdx_subs = cell(1, nDims);
+            [pIdx_subs{:}] = ind2sub(dimSizes, pIdx);
 
             % Euclidean criterion across continuous dimensions
             if isempty(contIdx)
                 criterion1 = true(size(dimGrids{1}));
             else
                 distSq = zeros(size(dimGrids{1}));
-                for c = contIdx
-                    distSq = distSq + (dimGrids{c} - subs{c}).^2;
+                for contDimIdx = contIdx
+                    distSq = distSq + (dimGrids{contDimIdx} - pIdx_subs{contDimIdx}).^2;
                 end
                 criterion1 = distSq <= distance_cont_euclid_sq;
             end
 
             % Angular criterion for spherical dimension (if present)
             if ~isempty(sphIdx)
-                chanNeighIdx = find(sphericalDistanceMatrix(subs{sphIdx(1)}, :) <= distance_chan_angular);
+                chanNeighIdx = find(sphericalDistanceMatrix(pIdx_subs{sphIdx(1)}, :) <= distance_spherical_radians);
                 criterion2 = ismember(sphGrid, chanNeighIdx);
             else
                 criterion2 = true(size(dimGrids{1}));
