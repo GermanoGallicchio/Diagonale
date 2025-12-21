@@ -1,6 +1,6 @@
 function results = dg_maxT(dg_cfg,results)
 
-nIterations = dg_cfg.nIterations;
+nIterations = dg_cfg.analysis.nIterations;
 metrics = results.resampling.metrics;
 p_crit = dg_cfg.p_crit;
 
