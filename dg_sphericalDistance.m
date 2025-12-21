@@ -149,7 +149,7 @@ if nChan > 2
     % which threshold yields the most similar number of neighbors across channels
 
     tldC = tiledlayout(panelC,'flow');
-    dVal = logspace(log10(0.5+1),log10(3+1),400)-1;
+    dVal = logspace(log10(0.25+1),log10(3+1),400)-1;
     MinNumNeigh = nan(size(dVal));
     MaxNumNeigh = nan(size(dVal));
     StdNumNeigh = nan(size(dVal));
@@ -158,7 +158,8 @@ if nChan > 2
         MaxNumNeigh(nIdx) = max(sum(sphericalDistanceMatrix<=dVal(nIdx),2)-1);
         StdNumNeigh(nIdx) = std(sum(sphericalDistanceMatrix<=dVal(nIdx),2)-1);
     end
-
+    StdNumNeigh = sqrt(StdNumNeigh);
+    
     nexttile(tldC)
     plot(dVal,MinNumNeigh); hold on
     plot(dVal,MaxNumNeigh)
@@ -173,7 +174,7 @@ if nChan > 2
     plot(dVal,StdNumNeigh)
 
     xline(dg_cfg.analysis.clusterParams.distance_spherical_radians,'Color',0.5*[1 1 1],'LineStyle','--','LineWidth',0.25)
-    legend(["minimum" "maximum" "st. deviation" num2str(dg_cfg.analysis.clusterParams.distance_spherical_radians)])
+    legend(["minimum" "maximum" "sqrt of st. deviation" num2str(dg_cfg.analysis.clusterParams.distance_spherical_radians)])
 end
 
 end
