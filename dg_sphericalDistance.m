@@ -63,21 +63,40 @@ if nChan > 2
     % Create figure
     figure(); clf
     f = gcf; f.Units = 'normalized'; f.Position = [0.1 0.01 0.8 0.9];
-    panelA = uipanel('Position', [0  0.4  1  0.6]);
-    panelB = uipanel('Position', [0  0    0.5  0.4]);
+    panelA = uipanel('Position', [0    0.4  1    0.6]);
+    panelB = uipanel('Position', [0    0    0.5  0.4]);
+    panelC = uipanel('Position', [0.5  0    0.5  0.4]);
     
-    % Panel B: Show neighborhood examples for random channels
-    tldB = tiledlayout(panelB, 'flow');
+    % Panel B: 
+        
+    % choose a random set of channels to plot
+    if nChan >= 8
+        nRandChans = 8;
+    else
+        nRandChans = ceil(nChans/4);
+    end
+    topoPlotFig_chanIdx = sort(randperm(nChan, nRandChans));
+
+    % topographic plot of spherical sites, highlighting neighbors for random seeds
+    if nRandChans==8
+        nRow = 2;
+        nCol = 4;
+        tldB = tiledlayout(panelB, nRow, nCol);
+    else
+        tldB = tiledlayout(panelB, 'flow');
+    end
     tldB.Padding = 'tight';
     tldB.TileSpacing = 'tight';
-    topoPlotFig_chanIdx = sort(randperm(nChan, max(8, ceil(nChan/4))));
-    
+
     for cIdx = 1:length(topoPlotFig_chanIdx)
+
         nexttile(tldB)
         chanIdx = topoPlotFig_chanIdx(cIdx);
+
         sphValues = zeros(1, nChan);
         sphValues(chanIdx) = 1;
         sphValues(neighborMatrix(chanIdx, :)) = 2;
+        
         params.projectionType = 'azimuthalEquidistant';
         params.drawLines = true;
         params.lineWidth = 1;
@@ -88,9 +107,16 @@ if nChan > 2
         params.colBar = false;
         params.colMap = [1 1 1; lines(2)];
         dg_sphericalPlot(dg_cfg, sphValues, params)
+
+        %ttl = title({['seed channel: ' chanLbl{cIdx}] [num2str(sum(chan2plot)) ' neighbors' ]});
+        ttl = title(['seed: ' sphCoord.labels{chanIdx}]);
+        ttl.FontWeight = 'normal';
+        ttl.VerticalAlignment = 'bottom';
+        ttl.FontSize = 10;
+        %ttl.Position(2) = 0.55;
     end
     
-    % Panel A: Distance matrix and histogram
+    %% Panel A: Distance matrix and histogram
     tldA = tiledlayout(panelA, 'flow');
     
     % Distance matrix heatmap
@@ -118,6 +144,36 @@ if nChan > 2
     hst = histogram(counts(:), 'BinWidth', 0.1);
     hst.Parent.YLabel.String = {'num of channel pairs' 'at a certain distance'};
     hst.Parent.XLabel.String = 'angular distance [rad]';
+
+    %% Panel C:
+    % which threshold yields the most similar number of neighbors across channels
+
+    tldC = tiledlayout(panelC,'flow');
+    dVal = logspace(log10(0.5+1),log10(3+1),400)-1;
+    MinNumNeigh = nan(size(dVal));
+    MaxNumNeigh = nan(size(dVal));
+    StdNumNeigh = nan(size(dVal));
+    for nIdx = 1:length(dVal)
+        MinNumNeigh(nIdx) = min(sum(sphericalDistanceMatrix<=dVal(nIdx),2)-1);
+        MaxNumNeigh(nIdx) = max(sum(sphericalDistanceMatrix<=dVal(nIdx),2)-1);
+        StdNumNeigh(nIdx) = std(sum(sphericalDistanceMatrix<=dVal(nIdx),2)-1);
+    end
+
+    nexttile(tldC)
+    plot(dVal,MinNumNeigh); hold on
+    plot(dVal,MaxNumNeigh)
+
+    xTick = logspace(log10(0.5+1),log10(3+1),6)-1;
+    set(gca,'XScale','log','XTick',xTick,'XLim',[dVal(1) dVal(end)])
+    sgtitle('effect of distance threshold on neighbor count')
+    ylabel('number of neighbor per channel')
+    xlabel('angular distance threshold [rad]')
+
+    yyaxis right
+    plot(dVal,StdNumNeigh)
+
+    xline(dg_cfg.analysis.clusterParams.distance_spherical_radians,'Color',0.5*[1 1 1],'LineStyle','--','LineWidth',0.25)
+    legend(["minimum" "maximum" "st. deviation" num2str(dg_cfg.analysis.clusterParams.distance_spherical_radians)])
 end
 
 end
