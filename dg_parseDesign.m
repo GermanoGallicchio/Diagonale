@@ -1,128 +1,168 @@
-function designCode = dg_parseDesign(dg_cfg, L)
-% deduces from the information what design the user wants to do 
-
+function designCode = dg_parseDesign(dg_cfg, Y)
+% Deduces the experimental design from dataStruct configuration
+%
+% Determines whether the analysis involves repeated measures factors and/or 
+% independent groups. Returns a 
+% 2-digit binary code indicating the design structure.
+%
 % INPUT:
-%   dg_cfg
-%
-%   L
-%
+%   dg_cfg      - struct with .analysis.dataStruct table containing:
+%                 - observationID: unique identifier for each observation
+%                 - indFactor#: independent group factors (optional)
+%                 - repFactor#: repeated measure factors (optional)
+%   Y           - data matrix (m x pY) used for validation only
 %
 % OUTPUT:
+%   designCode  - 1x2 binary vector [repMeasures, indGroups]
+%                 [0 0]: Correlation/association (no factors)
+%                 [0 1]: Independent observations comparison
+%                 [1 0]: Repeated measures comparison
+%                 [1 1]: Mixed design (independent + repeated measures)
 %
+% watch out for:
+%   - Unbalanced designs (subjects with different number of observations)
+%     will trigger a warning but will use max count for structure detection
 %
-
 % Author: Germano Gallicchio (germano.gallicchio@gmail.com)
 
 
 %% sanity checks
 
-designTbl_varLbl = dg_cfg.designTbl.Properties.VariableNames;
+varLbl = dg_cfg.analysis.dataStruct.Properties.VariableNames;
 
-% design table must include one subjID column
-if ~any(contains(designTbl_varLbl,'subjID'))
-    error('design table must include one subjID column')
+% if indFactor# not entered in dataStruct: put 1s all over
+if ~any(startsWith(varLbl,'indFactor'))
+    warning('"indFactor#" column(s) in dg_cfg.analysis.dataStruct not entered. I am assuming you do not want to compare between independent observations.')
+    disp('note: to achieve the same and not see the warning above create a dg_cfg.analysis.dataStruct.indFactor1 variable and use all 1s)')
+    dg_cfg.analysis.dataStruct.indFactor1 = ones(size(dg_cfg.analysis.dataStruct,1),1);
 end
 
-% design table must include one groupID column
-if ~any(contains(designTbl_varLbl,'groupID'))
-    error('design table must include one groupID column (note: use all 1s if there is only one group)')
+% if repFactor# not entered in dataStruct: put 1s all over
+if ~any(startsWith(varLbl,'repFactor'))
+    warning('"repFactor#" column(s) in dg_cfg.analysis.dataStruct not entered. I am assuming you do not want to compare between repeated observations.')
+    disp('note: to achieve the same and not see the warning above create a dg_cfg.analysis.dataStruct.repFactor1 variable and use all 1s)')
+    dg_cfg.analysis.dataStruct.repFactor1 = ones(size(dg_cfg.analysis.dataStruct,1),1);
 end
 
-% design table must include at least one rmFactor column
-if ~any(contains(designTbl_varLbl,'rmFactor'))
-    error('design table must include at least one "rmFactor" column (note: use all 1s if there is only one rmLevel)')
+% dataStruct must include one observationID column
+if ~any(contains(varLbl,'observationID'))
+    warning('"observationID" column in dg_cfg.analysis.dataStruct not entered. I might make a guess in a future version... but not yet.')
+    %disp('note: if my guess is not accurate create a dg_cfg.analysis.dataStruct.observationID variable)')
+    error('dg_cfg.analysis.dataStruct.observationID is needed')
 end
 
-%% put all information on the table
+% update varLbl
+varLbl = dg_cfg.analysis.dataStruct.Properties.VariableNames;
 
-nIterations = dg_cfg.nIterations;
-nRow = height(dg_cfg.designTbl);
+%% pull information from the table
+% older // delete
 
-% num of unique subjects
-[unique_subjID,~,subjIdxPerRow] = unique(dg_cfg.designTbl.subjID,'stable');
-nUnique_subjID = length(unique_subjID);
+% % nIterations = dg_cfg.analysis.nIterations;  % delete this line
+% 
+% % num of rows
+% m = size(dg_cfg.analysis.dataStruct,1); 
+% 
+% % numerosity of independent observations
+% [uniqueObservationID,~,~] = unique(dg_cfg.analysis.dataStruct.observationID,'stable');
+% uniqueObservationID_numerosity = length(uniqueObservationID);
+% 
+% % numerosity of levels in indFactor1
+% uniqueIndFactor1 = string(unique(dg_cfg.analysis.dataStruct.indFactor1,'stable'));
+% uniqueIndFactor1_numerosity = length(uniqueIndFactor1);
+% 
+% % numerosity of levels in repFactor# (all repFactors pooled)
+% repeatedObservationID_numerosity = m / uniqueObservationID_numerosity;
 
-% num of subjID repeats
-nRepeats_subjID = nRow / nUnique_subjID;
 
-% unique groups
-unique_groupID = string(unique(dg_cfg.designTbl.groupID,'stable'));
-nUnique_groupID = length(unique_groupID);
+%% pull information from the table
 
-% num of repeated-measure levels factors
-rmF_col_idx = contains(dg_cfg.designTbl.Properties.VariableNames,'rmFactor');
-nUnique_RMFactors = nnz(rmF_col_idx);
-nUnique_RMLevelsPerFactors = nan(1,nUnique_RMFactors);
-colCounter = 0;
-for rmIdx = find(rmF_col_idx)
-    colCounter = colCounter + 1;
-    nUnique_RMLevelsPerFactors(1,colCounter) = length(unique(dg_cfg.designTbl{:,rmIdx}));
+% num of rows
+m = size(dg_cfg.analysis.dataStruct,1); 
+
+uniqueness = cellfun(@(k) length(unique(dg_cfg.analysis.dataStruct.(k))), varLbl, 'UniformOutput', true);
+
+% num of unique observations
+uniqueObservationID_numerosity = uniqueness(strcmp(varLbl,'observationID'));
+
+% num of indFactors
+nUnique_indFactors = sum(startsWith(varLbl,'indFactor'));
+
+% num of levels per each indFactor
+nUnique_levelsPerIndFactors = uniqueness(startsWith(varLbl,'indFactor'));
+
+% num of levels across all indFactors (pooled)
+nUnique_indFactorLevels = prod(nUnique_levelsPerIndFactors);
+
+% num of repFactors
+nUnique_repFactors = sum(startsWith(varLbl,'repFactor'));
+
+% num of levels per each repFactor
+nUnique_levelsPerRepFactors = uniqueness(startsWith(varLbl,'repFactor'));
+
+% num of levels across all repFactor (pooled)
+nUnique_repFactorLevels = prod(nUnique_levelsPerRepFactors);
+
+% check if there are repeated observations per observationID
+obsID_counts = groupcounts(dg_cfg.analysis.dataStruct.observationID);
+repeatedPerObservationID_numerosity = max(obsID_counts);
+
+% warning if unbalanced
+if length(unique(obsID_counts)) > 1
+    warning('unbalanced design detected: observations have different numbers of repeated measures (range: %d to %d).', ...
+        min(obsID_counts), max(obsID_counts));
 end
-nUnique_RMLevels = prod(nUnique_RMLevelsPerFactors);
-
-designTbl = dg_cfg.designTbl;
 
 %% sanity checks
+% delete this cell because it won't work (hence it wont be useful) if the
+% design is unbalanced whereby subjs have different number of rep measures
 
-% number of subjID repeats must match num of unique overall RM levels
-if ~nRepeats_subjID==nUnique_RMLevels
-    error('likely user design error: the number of subjID repeats must match the number of unique repeated-measure levels (overall across factors)')
-end
+% % number of observationID repeats must match num of unique overall RM levels
+% if ~repeatedObservationID_numerosity==nUnique_repFactorLevels
+%     error('likely user design error: the number of observationID repeats must match the number of unique repeated-measure levels (overall across factors)')
+% end
 
 %% deduct intended design
 
+% create a two digit binary number, indicating whether the analysis
+% intends to compare across repeated measure factors and/or independent groups
+% from left to right:
+% 1st digit = repFactor (e.g., paired sample t-tests, repeated measures ANOVA)
+% 2nd digit = indFactor (e.g., independent sample t-tests, between-groups ANOVA)
+% it does not matter if there are multiple repFactor (or indFactor), the
+% values are still 0 (no such comparison) or 1 (there are such comparisons)
+
 designOptions = dg_designOptions;
 
-if nRepeats_subjID==1
-    if nUnique_groupID<=1
-        designCode = [1 0 0];
-    else
-        if size(L,2) < (nUnique_groupID-1)
-            designCode = [0 1 0];
-            warning('likely user design error: not enough columns in L')
-        elseif size(L,2) == (nUnique_groupID-1)
-            designCode = [0 1 0];
-        else
-            designCode = [1 1 0];
-        end
-    end
-else
-    if nUnique_groupID<=1
-        if size(L,2) < nUnique_RMLevels-1
-            designCode = [0 0 1];
-            warning('likely user design error: not enough columns in L')
-        elseif size(L,2) == nUnique_RMLevels-1
-            designCode = [0 0 1];
-        else
-            designCode = [1 0 1];
-        end
-    else
-        if size(L,2) < (nUnique_groupID-1)+(nUnique_RMLevels-1)+((nUnique_groupID-1)*(nUnique_RMLevels-1))
-            designCode = [0 1 1];
-            warning('likely user design error: not enough columns in L')
-        elseif size(L,2) == (nUnique_groupID-1)+(nUnique_RMLevels-1)+((nUnique_groupID-1)*(nUnique_RMLevels-1))
-            designCode = [0 1 1];
-        else
-            designCode = [1 1 1];
-        end
-    end
+% Determine design code only based on data structure (dataStruct)
+% (ie, not based on Y dimensions, since Y can have varying columns for PLS-SVD)
+hasRepMeasures = (repeatedPerObservationID_numerosity > 1);
+hasIndGroups = (nUnique_indFactorLevels > 1);
+
+% initialize design code
+designCode = [0 0];
+
+if hasRepMeasures
+    designCode(1) = 1;  % repeated measures present
 end
 
-%% plot structure of L
+if hasIndGroups
+    designCode(2) = 1;  % independent groups of observations present
+end
 
-if dg_cfg.figFlag
+%% plot structure of Y
+
+if dg_cfg.analysis.figFlag
     figure()
-    imagesc(normalize(L,'range',[-1 1]))
-    title('structure of L')
+    imagesc(normalize(Y,'range',[-1 1]))
+    title('structure of Y')
     axis equal
     box off
     axis off
     colormap(parula)
-
 end
 
 %% 
-if dg_cfg.verbose
+if dg_cfg.analysis.verbose
     rowIdx = (designOptions{:,"codeDec"}==bin2dec(num2str(designCode)))';
     fprintf(['\n' 'Design num is: ' num2str(designOptions{rowIdx,"codeDec"}) ', ' designOptions{rowIdx,"lbl"}{1} '\n'])
 end
