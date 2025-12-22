@@ -60,12 +60,12 @@ end
 for dIdx = 1:length(dims)
     if ~isfield(dg_cfg.dimensions.(dims{dIdx}),'lbl')
         dimLbl = [dims{dIdx}  dg_cfg.dimensions.(dims{dIdx}).type];
-        warning(['dimension label not provided by user for ' dims{dIdx} '. Using this label: ' dimLbl])
+        warning(['Diagonale: label not provided by user for dimension ' dims{dIdx} '. Using this label: ' dimLbl])
         dg_cfg.dimensions.(dims{dIdx}).lbl = dimLbl;
     end
     if ~isfield(dg_cfg.dimensions.(dims{dIdx}),'units')
         dimUnits = 'undefinedunits';
-        warning(['dimension units not provided by user for ' dims{dIdx} '. Using this label: ' dimUnits])
+        warning(['Diagonale: units not provided by user for dimension ' dims{dIdx} ' (' dg_cfg.dimensions.(dims{dIdx}).lbl ') . Using this label: ' dimUnits])
         dg_cfg.dimensions.(dims{dIdx}).units = dimUnits;
     end
     if strcmp(dg_cfg.dimensions.(dims{dIdx}).type,'spherical')
