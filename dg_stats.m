@@ -1,4 +1,4 @@
-function results = dg_stats(dg_cfg, L, R)
+function results = dg_stats(dg_cfg, Y, X)
 
 % This is the front-end wrapper function that reads the input, calls the
 % "back-end" functions to do the jobs (e.g., understand what design the
@@ -8,9 +8,9 @@ function results = dg_stats(dg_cfg, L, R)
 % [results, clusterMetrics, clustThreshold] = PE_Stats_y1x2z3(dataArray, PE_parameters, DimStruct)
 %
 % INPUT:
-%   L           - 
+%   Y           -
 %
-%   R           - 
+%   X           -
 %
 %   dg_cfg
 %
@@ -22,101 +22,128 @@ function results = dg_stats(dg_cfg, L, R)
 
 %% sanity checks
 
-% L and R are matrices
-if ~length(size(L))==2
-    error('L must be a matrix')
+% make sure the analysis is validated prior to this function
+if ~isfield(dg_cfg,'validation')
+    analysisUnvalidated = true;
+else
+    analysisUnvalidated = false;
+    if ~isfield(dg_cfg.validation,'analysis')
+        analysisUnvalidated = true;
+    else
+        if ~dg_cfg.validation.analysis
+            analysisUnvalidated = true;
+        end
+    end
 end
-if ~length(size(R))==2
-    error('R must be a matrix')
-end
-
-% L and R have the same num of rows
-if ~size(L,1)==size(R,1)
-    error('L and R must have the same num of rows')
-end
-
-% designTbl must exist
-fieldNeeded = 'designTbl';
-if ~any(contains(fieldnames(dg_cfg),fieldNeeded))
-    error(['dg_cfg needs field: ' fieldNeeded])
+if analysisUnvalidated
+    error('dg_cfg.analysis not validated. use: dg_cfg = dg_validateAnalysis(dg_cfg)')
 end
 
-% L has the same num of rows as in dg_cfg.designTbl
-if ~size(L,1)==size(dg_cfg.designTbl,1)
-    error('L and designTbl must have the same num of rows')
+
+
+% Y and X are matrices
+if ~ismatrix(Y)
+    error('Y must be a matrix')
+end
+if ~ismatrix(X)
+    error('X must be a matrix')
 end
 
-% univariate analysis only does one comparison at the time
-if ismember(dg_cfg.analysis, ["empiricalL1_FDR" "theoreticalL1_clusterMaxT"])
-    if size(L,2)~=1
-        error(['more than one matrix L columns (i.e., more than one comparison) not supported for ' num2str(dg_cfg.designCode) ' ' dg_cfg.analysis ])
+% Y and X have the same num of rows
+if size(Y,1)~=size(X,1)
+    error('Y and X must have the same num of rows')
+end
+
+% X (and Y) must have the same num of rows as in dg_cfg.analysis.dataStruct
+if size(X,1)~=size(dg_cfg.analysis.dataStruct,1)
+    error('X and dg_cfg.analysis.dataStruct must have the same num of rows')
+end
+
+% ignore_col if provided must be a row vector of same length as columns of X
+if isfield(dg_cfg.analysis, 'ignore_col')
+    if ~isrow(dg_cfg.analysis.ignore_col)
+        error('dg_cfg.analysis.ignore_col must be a row vector')
+    else
+        if size(dg_cfg.analysis.ignore_col,2)~=size(X,2)
+            error('dg_cfg.analysis.ignore_col must have same length as columns of X')
+        end
     end
 end
 
-% check objective field matches one of the options
-objectiveList = ["permutationH0testing" "bootstrapStability"]';
-if ~ismember(dg_cfg.objective,objectiveList)
-    disp(objectiveList)
-    error('dg_cfg.objective must be one one of the above')
+% ignore_row if provided must be a column vector of same length as rows of X
+if isfield(dg_cfg.analysis, 'ignore_row')
+    if ~iscolumn(dg_cfg.analysis.ignore_row)
+        error('dg_cfg.analysis.ignore_row must be a column vector')
+    else
+        if size(dg_cfg.analysis.ignore_row,1)~=size(X,1)
+            error('dg_cfg.analysis.ignore_row must have same length as rows of X')
+        end
+    end
 end
 
-% check analysis field matches one of the options
-analysisList = ["empiricalL1_FDR" "theoreticalL1_clusterMaxT" "pls_svd"]';
-if ~ismember(dg_cfg.analysis,analysisList)
-    disp(analysisList)
-    error('dg_cfg.analysis must be one one of the above')
+% univariate analysis only does one comparison at the time
+if ismember(dg_cfg.analysis.type, ["empiricalL1_FDR" "theoreticalL1_clusterMaxT"])
+    if size(Y,2)>1
+        error(['more than one column in matrix Y (i.e., more than one comparison) not supported for ' dg_cfg.analysis.type ])
+    end
 end
 
-%% apply row ignore
+%% apply ignore_row, if provided
 
+if isfield(dg_cfg.analysis,'ignore_row')
 
-% matrices L and R
-L = L(~dg_cfg.row_ignore,:);
-R = R(~dg_cfg.row_ignore,:);
+    % take a subset of matrices Y and X and of the accompanying dataStruct
+    Y = Y(~dg_cfg.analysis.ignore_row,:);
+    X = X(~dg_cfg.analysis.ignore_row,:);
+    dg_cfg.analysis.dataStruct = dg_cfg.analysis.dataStruct(~dg_cfg.analysis.ignore_row,:);
 
-% designTbl
-dg_cfg.designTbl = dg_cfg.designTbl(~dg_cfg.row_ignore,:);
+end
 
-%% keep a copy of the original matrices
+%% keep a copy of the matrices Y and X
 
-R_orig   = R;
-L_orig   = L;
+X_orig   = X;
+Y_orig   = Y;
 
 %% shortcuts
 
-[m, pL] = size(L);
-[~, pR] = size(R);
+% num of iterations
+nIterations = dg_cfg.analysis.nIterations;
 
-nIterations = dg_cfg.nIterations;
-ny1 = dg_cfg.dimensions.y1_num;
-nx2 = dg_cfg.dimensions.x2_num;
-nz3 = dg_cfg.dimensions.z3_num;
+% size of matrices Y and X
+[m, pY] = size(Y);
+[~, pX] = size(X);
 
-%% defaults value
+% num of dimensions and their numerosity 
+% in d# order (fieldnames order)
+dimKeys  = fieldnames(dg_cfg.dimensions);
+dimTypes = cellfun(@(k) dg_cfg.dimensions.(k).type, dimKeys, 'UniformOutput', false);
+dimSizes = cellfun(@(k) length(dg_cfg.dimensions.(k).vec), dimKeys);
+nDims    = numel(dimKeys);
+Nall     = prod(dimSizes);
 
-% if group not entered in designTable: put 1s all over
-varLbl = dg_cfg.designTbl.Properties.VariableNames;
-if ~any(contains(varLbl,'groupID'))
-    warning('"groupID" column in dg_cfg.designTable not entered. I am assuming you have one group.')
-    disp('note: to achieve the same and not see the warning above create a group variable and use all 1s)')
-    dg_cfg.designTbl.groupID = ones(size(dg_cfg.designTbl,1),1);
+contIdx = find(strcmp(dimTypes, 'continuous'));
+sphIdx  = find(strcmp(dimTypes, 'spherical'));
+catIdx  = find(strcmp(dimTypes, 'categorical'));
+
+if numel(sphIdx) > 1
+    error('Only one spherical dimension is supported');
 end
 
-% if no rmFactor entered: put 1s all over
-varLbl = dg_cfg.designTbl.Properties.VariableNames;
-if ~any(contains(varLbl,'rmFactor'))
-    warning('"rmFactor1" column in dg_cfg.designTable not entered. I am assuming you have one rmFactor with one level. (note: use all 1s if there is only one rmLevel)')
-    dg_cfg.designTbl.rmFactor1 = ones(size(dg_cfg.designTbl,1),1);
+% cluster analyses do not support categorical dimensions
+if strcmp(dg_cfg.analysis.type, "theoreticalL1_clusterMaxT") && ~isempty(catIdx)
+    error('categorical dimensions are not supported for cluster-based analyses');
 end
 
 %% parse design
 % understand what analysis the user wants to do
 
+keyboard; % UNTIL HERE OK
 
-% designOptions = dg_designOptions;  % can delete this row
-designCode = dg_parseDesign(dg_cfg,L);
+designCode = dg_parseDesign(dg_cfg,Y);
 dg_cfg.designCode = designCode;
 results.designCode = designCode;
+
+
 
 %% perform the analysis
 
@@ -138,10 +165,10 @@ switch [dg_cfg.analysis ' & ' num2str(dg_cfg.designCode)]
         for itIdx = 1:nIterations
 
             % sort rows as appropriate
-            [L,R] = dg_sortRows(dg_cfg,L_orig,R_orig,rowIdx,itIdx);
+            [Y,X] = dg_sortRows(dg_cfg,Y_orig,X_orig,rowIdx,itIdx);
 
             % perform test
-            [statVal, pVal] = corr(L, R, 'type', corrType); % test
+            [statVal, pVal] = corr(Y, X, 'type', corrType); % test
   
             if itIdx==1
                 statVal_obs           = statVal;
@@ -149,7 +176,7 @@ switch [dg_cfg.analysis ' & ' num2str(dg_cfg.designCode)]
             end
 
             if itIdx==1
-                statVal_resamp = zeros(nIterations,pR);
+                statVal_resamp = zeros(nIterations,pX);
             end
             statVal_resamp(itIdx,:) = statVal;
 
@@ -164,11 +191,11 @@ switch [dg_cfg.analysis ' & ' num2str(dg_cfg.designCode)]
     case 'empiricalL1_FDR & 0  1  0' % -- independent sample t-test --
         for itIdx = 1:nIterations
             % sort rows as appropriate
-            [L,R] = dg_sortRows(dg_cfg,L_orig,R_orig,rowIdx,itIdx);
+            [Y,X] = dg_sortRows(dg_cfg,Y_orig,X_orig,rowIdx,itIdx);
 
             % perform test
             varType = 'unequal';  % equal | unequal (for info see doc ttest2)
-            [~,p,~,stats] = ttest2(R(L==max(L),:),R(L==min(L),:),'Vartype',varType);
+            [~,p,~,stats] = ttest2(X(Y==max(Y),:),X(Y==min(Y),:),'Vartype',varType);
             statVal = stats.tstat;
             pVal = p;
 
@@ -178,7 +205,7 @@ switch [dg_cfg.analysis ' & ' num2str(dg_cfg.designCode)]
             end
 
             if itIdx==1
-                statVal_resamp = zeros(nIterations,pR);
+                statVal_resamp = zeros(nIterations,pX);
             end
             statVal_resamp(itIdx,:) = statVal;
 
@@ -194,14 +221,14 @@ switch [dg_cfg.analysis ' & ' num2str(dg_cfg.designCode)]
         for itIdx = 1:nIterations
 
             % sort rows as appropriate
-            [L,R] = dg_sortRows(dg_cfg,L_orig,R_orig,rowIdx,itIdx);
+            [Y,X] = dg_sortRows(dg_cfg,Y_orig,X_orig,rowIdx,itIdx);
 
             % rows of conditions belonging to first and second halves
-            cond_firstHalf = 1:length(L)/2;
-            cond_secondHalf = 1+length(L)/2:length(L);
+            cond_firstHalf = 1:length(Y)/2;
+            cond_secondHalf = 1+length(Y)/2:length(Y);
             % rows of conditions with the largest and lowest constrast code
             % ie, find which hald corresponds with the largest constrast code
-            contCodes = [unique(L(cond_firstHalf)) unique(L(cond_secondHalf))];
+            contCodes = [unique(Y(cond_firstHalf)) unique(Y(cond_secondHalf))];
             [~, sortIdx] = sort(contCodes,'descend');
             if diff(sortIdx)<0
                 cond_maxHalf = cond_secondHalf;
@@ -212,7 +239,7 @@ switch [dg_cfg.analysis ' & ' num2str(dg_cfg.designCode)]
             end
 
             % perform test
-            [~,p,~,stats] = ttest(R(cond_maxHalf,:),R(cond_minHalf,:));
+            [~,p,~,stats] = ttest(X(cond_maxHalf,:),X(cond_minHalf,:));
             statVal = stats.tstat;
             pVal = p;
 
@@ -222,7 +249,7 @@ switch [dg_cfg.analysis ' & ' num2str(dg_cfg.designCode)]
             end
 
             if itIdx==1
-                statVal_resamp = zeros(nIterations,pR);
+                statVal_resamp = zeros(nIterations,pX);
             end
             statVal_resamp(itIdx,:) = statVal;
 
@@ -251,10 +278,10 @@ switch [dg_cfg.analysis ' & ' num2str(dg_cfg.designCode)]
         for itIdx = 1:nIterations
 
             % sort rows as appropriate
-            [L,R] = dg_sortRows(dg_cfg,L_orig,R_orig,rowIdx,itIdx);
+            [Y,X] = dg_sortRows(dg_cfg,Y_orig,X_orig,rowIdx,itIdx);
 
             % perform test
-            [statVal, pVal] = corr(L, R, 'type', corrType); % test
+            [statVal, pVal] = corr(Y, X, 'type', corrType); % test
 
             % form clusters
             [clusterMembership, clustIDList, metrics] = dg_clusterForming(dg_cfg, statVal ,pVal);
@@ -273,7 +300,7 @@ switch [dg_cfg.analysis ' & ' num2str(dg_cfg.designCode)]
 
                 case 'bootstrapStability'
                     if itIdx==1
-                        statVal_boot = zeros(nIterations,ny1*nx2*nz3);
+                        statVal_boot = zeros(nIterations,Nall);
                     end
                     statVal_boot(itIdx,:) = statVal;
             end
@@ -303,11 +330,11 @@ switch [dg_cfg.analysis ' & ' num2str(dg_cfg.designCode)]
         for itIdx = 1:nIterations
 
             % sort rows as appropriate
-            [L,R] = dg_sortRows(dg_cfg,L_orig,R_orig,rowIdx,itIdx);
+            [Y,X] = dg_sortRows(dg_cfg,Y_orig,X_orig,rowIdx,itIdx);
 
             % perform test
             varType = 'unequal';  % equal | unequal (for info see doc ttest2)
-            [~,p,~,stats] = ttest2(R(L==max(L),:),R(L==min(L),:),'Vartype',varType);
+            [~,p,~,stats] = ttest2(X(Y==max(Y),:),X(Y==min(Y),:),'Vartype',varType);
             statVal = stats.tstat;
             pVal = p;
 
@@ -328,7 +355,7 @@ switch [dg_cfg.analysis ' & ' num2str(dg_cfg.designCode)]
 
                 case 'bootstrapStability'
                     if itIdx==1
-                        statVal_boot = zeros(nIterations,ny1*nx2*nz3);
+                        statVal_boot = zeros(nIterations,Nall);
                     end
                     statVal_boot(itIdx,:) = statVal;
             end
@@ -358,14 +385,14 @@ switch [dg_cfg.analysis ' & ' num2str(dg_cfg.designCode)]
         for itIdx = 1:nIterations
 
             % sort rows as appropriate
-            [L,R] = dg_sortRows(dg_cfg,L_orig,R_orig,rowIdx,itIdx);
+            [Y,X] = dg_sortRows(dg_cfg,Y_orig,X_orig,rowIdx,itIdx);
 
              % rows of conditions belonging to first and second halves
-            cond_firstHalf = 1:length(L)/2;
-            cond_secondHalf = 1+length(L)/2:length(L);
+            cond_firstHalf = 1:length(Y)/2;
+            cond_secondHalf = 1+length(Y)/2:length(Y);
             % rows of conditions with the largest and lowest constrast code
             % ie, find which hald corresponds with the largest constrast code
-            contCodes = [unique(L(cond_firstHalf)) unique(L(cond_secondHalf))];
+            contCodes = [unique(Y(cond_firstHalf)) unique(Y(cond_secondHalf))];
             [~, sortIdx] = sort(contCodes,'descend');
             if diff(sortIdx)<0
                 cond_maxHalf = cond_secondHalf;
@@ -376,7 +403,7 @@ switch [dg_cfg.analysis ' & ' num2str(dg_cfg.designCode)]
             end
 
             % perform test
-            [~,p,~,stats] = ttest(R(cond_maxHalf,:),R(cond_minHalf,:));
+            [~,p,~,stats] = ttest(X(cond_maxHalf,:),X(cond_minHalf,:));
             statVal = stats.tstat;
             pVal = p;
 
@@ -397,7 +424,7 @@ switch [dg_cfg.analysis ' & ' num2str(dg_cfg.designCode)]
 
                 case 'bootstrapStability'
                     if itIdx==1
-                        statVal_boot = zeros(nIterations,ny1*nx2*nz3);
+                        statVal_boot = zeros(nIterations,Nall);
                     end
                     statVal_boot(itIdx,:) = statVal;
             end
@@ -420,28 +447,28 @@ switch [dg_cfg.analysis ' & ' num2str(dg_cfg.designCode)]
         end
 
     case {'PLS_SVD & 1  0  0'   'PLS_SVD & 0  1  0'   'PLS_SVD & 1  1  0'}
-        nModes = min(rank(L),rank(R));
+        nModes = min(rank(Y),rank(X));
 
         for itIdx = 1:nIterations
 
             % sort rows as appropriate
-            [L,R] = dg_sortRows(dg_cfg,L_orig,R_orig,rowIdx,itIdx);
+            [Y,X] = dg_sortRows(dg_cfg,Y_orig,X_orig,rowIdx,itIdx);
 
-            % mean center columns of L and R
-            Lz = normalize(L,'center');
-            Rz = normalize(R,'center');
+            % mean center columns of Y and X
+            Yz = normalize(Y,'center');
+            Xz = normalize(X,'center');
 
-            % zscore columns of L (optional)
+            % zscore columns of Y (optional)
             if dg_cfg.pls_svdParams.zscoringVec(1)
-                Lz = zscore(L);
+                Yz = zscore(Y);
             end
-            % zscore columns of R (optional)
+            % zscore columns of X (optional)
             if dg_cfg.pls_svdParams.zscoringVec(2)
-                Rz = zscore(R);
+                Xz = zscore(X);
             end
 
-            % apply ignore mask
-            Rz(:,logical(dg_cfg.R_ignore)) = 0;
+            % apply ignore mask (features in X)
+            Xz(:,logical(dg_cfg.R_ignore)) = 0;
 
             % scale by frobenius norm (optional)
             % DELETE THIS SECTION UNLESS JUSTIFIED
@@ -451,8 +478,8 @@ switch [dg_cfg.analysis ' & ' num2str(dg_cfg.designCode)]
             %                     end
 
             % cross-product
-            %                     C = (Lz'*Rz_pca)/(m-1);  % for PCA
-            C = (Lz'*Rz)/(m-1);
+            %                     C = (Yz'*Xz_pca)/(m-1);  % for PCA
+            C = (Yz'*Xz)/(m-1);
 
             % SVD
             [U,S,V] = svd(C,"econ");
@@ -466,17 +493,17 @@ switch [dg_cfg.analysis ' & ' num2str(dg_cfg.designCode)]
             % match SVD outcome with observed data
             % only for last iteration
             if itIdx==1
-                [U, V] = dg_signConvention(Lz,Rz,U,V);
+                [U, V] = dg_signConvention(Yz,Xz,U,V);
             end
 
             % metrics: level-1 (feature based)
-            LU = Lz*U;
-            RV = Rz*V;
+            YU = Yz*U;
+            XV = Xz*V;
 
             % metrics: level-2 (SV based)
             s = diag(S); % singular value of each mode
             p = s.^2 / sum(s.^2); % proportion of covariance explained by each mode
-            r = diag(corr(LU, RV)); % Pearson correlation between left and right latent variables (i.e., scores = data * singular vectors) per mode
+            r = diag(corr(YU, XV)); % Pearson correlation between left and right latent variables (i.e., scores = data * singular vectors) per mode
             % store the above as col vectors
             s = s(:);
             p = p(:);
@@ -487,8 +514,8 @@ switch [dg_cfg.analysis ' & ' num2str(dg_cfg.designCode)]
             if itIdx==1
                 U_obs = U;
                 V_obs = V;
-                LU_obs = LU;
-                RV_obs = RV;
+                YU_obs = YU;
+                XV_obs = XV;
                 s_obs = s';
                 p_obs = p';
                 r_obs = r';
@@ -511,15 +538,15 @@ switch [dg_cfg.analysis ' & ' num2str(dg_cfg.designCode)]
                     % initialize lvl1 (loading wise) metrics
                     % store singular and latent vectors (all iterations)
                     if itIdx==1
-                        U_boot = zeros(size(L,2),nModes,nIterations);
-                        V_boot = zeros(size(R,2),nModes,nIterations);
-                        LU_boot = zeros(size(L,1),nModes,nIterations);
-                        RV_boot = zeros(size(R,1),nModes,nIterations);
+                        U_boot = zeros(size(Y,2),nModes,nIterations);
+                        V_boot = zeros(size(X,2),nModes,nIterations);
+                        YU_boot = zeros(size(Y,1),nModes,nIterations);
+                        XV_boot = zeros(size(X,1),nModes,nIterations);
                     end
                     U_boot(:,:,itIdx) = U;
                     V_boot(:,:,itIdx) = V;
-                    LU_boot(:,:,itIdx) = LU;
-                    RV_boot(:,:,itIdx) = RV;
+                    YU_boot(:,:,itIdx) = YU;
+                    XV_boot(:,:,itIdx) = XV;
             end
 
             dg_counter(itIdx,nIterations)  % iteration counter
@@ -533,8 +560,8 @@ switch [dg_cfg.analysis ' & ' num2str(dg_cfg.designCode)]
         results.PLS_SVD.r_obs = r_obs;
         results.PLS_SVD.U_obs = U_obs;
         results.PLS_SVD.V_obs = V_obs;
-        results.PLS_SVD.LU_obs = LU_obs;
-        results.PLS_SVD.RV_obs = RV_obs;
+        results.PLS_SVD.YU_obs = YU_obs;
+        results.PLS_SVD.XV_obs = XV_obs;
 
         switch dg_cfg.objective
             case 'permutationH0testing'
@@ -543,8 +570,8 @@ switch [dg_cfg.analysis ' & ' num2str(dg_cfg.designCode)]
                 % all iterations at lvl1
                 results.resampling.U_boot   = U_boot(:,:,:);
                 results.resampling.V_boot   = V_boot(:,:,:);
-                results.resampling.LU_boot  = LU_boot(:,:,:);
-                results.resampling.RV_boot  = RV_boot(:,:,:);
+                results.resampling.YU_boot  = YU_boot(:,:,:);
+                results.resampling.XV_boot  = XV_boot(:,:,:);
         end
 
     otherwise % -- any other design --
