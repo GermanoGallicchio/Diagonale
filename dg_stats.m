@@ -1,22 +1,39 @@
 function results = dg_stats(dg_cfg, Y, X)
-
-% This is the front-end wrapper function that reads the input, calls the
-% "back-end" functions to do the jobs (e.g., understand what design the
-% user wants, do sanity checks, do the analysis) and presents the output to
-% the user. 
+% Main statistical analysis wrapper
 %
-% [results, clusterMetrics, clustThreshold] = PE_Stats_y1x2z3(dataArray, PE_parameters, DimStruct)
+% Front-end function that orchestrates the entire analysis pipeline:
+% design detection, validation, permutation/bootstrap resampling, and 
+% statistical testing. Supports correlation, independent groups, repeated 
+% measures, and mixed designs using regression or PLS-SVD.
 %
 % INPUT:
-%   Y           -
-%
-%   X           -
-%
-%   dg_cfg
+%   dg_cfg      - struct with validated analysis configuration containing:
+%                 .analysis.nIterations, .analysis.dataStruct, .dimensions
+%                 .analysis.type ('empirical_FDR' or 'theoretical_maxT')
+%   X           - Primary data matrix (m x pX) where m = observations, pX = variables
+%   Y           - Design/response matrix (m x pY). Role depends on analysis:
+%                 * Correlation: Y is a secondary data matrix to correlate with X
+%                 * Grouped comparisons [0 1]: Y contains group identifiers
+%                 * Paired/RM comparisons [1 0]: Y contains condition/contrast codes
+%                 * PLS-SVD: Y is a secondary data matrix for multivariate analysis
 %
 % OUTPUT:
+%   results     - struct containing:
+%                 .designCode: [repMeasures, indGroups] binary code
+%                 .stat: observed test statistic matrix
+%                 .pVal: p-value matrix
+%                 .clusterMetrics: cluster-based inference results (if applicable)
 %
+% PREREQUISITES:
+%   - dg_cfg must be validated with dg_validateAnalysis first
+%   - dg_cfg.analysis.dataStruct must contain: observationID, 
+%     and optional indFactor# and repFactor# columns
 %
+% ANALYSIS TYPES SUPPORTED:
+%   - Correlation (no factors)
+%   - Independent samples t-tests / between-groups ANOVA
+%   - Paired t-tests / repeated measures ANOVA
+%   - Mixed designs (groups + repeated measures)
 %
 % Author: Germano Gallicchio (germano.gallicchio@gmail.com)
 
@@ -82,7 +99,7 @@ if isfield(dg_cfg.analysis, 'ignore_row')
 end
 
 % univariate analysis only does one comparison at the time
-if ismember(dg_cfg.analysis.type, ["empiricalL1_FDR" "theoreticalL1_clusterMaxT"])
+if ismember(dg_cfg.analysis.type, ["empirical_FDR" "theoretical_maxT"])
     if size(Y,2)>1
         error(['more than one column in matrix Y (i.e., more than one comparison) not supported for ' dg_cfg.analysis.type ])
     end
@@ -130,452 +147,63 @@ if numel(sphIdx) > 1
 end
 
 % cluster analyses do not support categorical dimensions
-if strcmp(dg_cfg.analysis.type, "theoreticalL1_clusterMaxT") && ~isempty(catIdx)
+if strcmp(dg_cfg.analysis.type, "theoretical_maxT") && ~isempty(catIdx)
     error('categorical dimensions are not supported for cluster-based analyses');
 end
 
 %% parse design
 % understand what analysis the user wants to do
 
-keyboard; % UNTIL HERE OK
-
 designCode = dg_parseDesign(dg_cfg,Y);
-dg_cfg.designCode = designCode;
+
+% keep a copy of the designCode in the analysis and in the results
+dg_cfg.analysis.designCode = designCode;
 results.designCode = designCode;
 
-
+keyboard; % UNTIL HERE MAYBE OK
 
 %% perform the analysis
 
 % get resampling indices
-rowIdx = dg_resample(dg_cfg);
+rowIdx = dg_reorderRowsGenerate(dg_cfg);
 
-switch [dg_cfg.analysis ' & ' num2str(dg_cfg.designCode)]
-    case 'empiricalL1_FDR & 1  0  0' % -- correlation --
+%% delegate to appropriate analysis function based on type and design code
 
-        % choose analysis subtype
-        list = ["Pearson" "Spearman" "Kendall" "cylindrical"];
-        [idx,tf] = listdlg('ListString',list,'SelectionMode','single','ListSize',[160 100],'PromptString','choose correlation type');
-        if tf==0; idx=1; warning('You did not choose correlation type. I chose for you: Pearson'); end
-        corrType = list(idx);
-        if strcmp(corrType,'cylindrical')
-            error('not coded yet') % it will require its own function to keep things tidy
-        end
+% Build key using analysis type and 2-digit design code
+key = sprintf('%s & %d  %d', dg_cfg.analysis.type, dg_cfg.designCode(1), dg_cfg.designCode(2));
 
-        for itIdx = 1:nIterations
+switch key
+    case 'empirical_FDR & 0  0'
+        % Correlation analysis (no groups, no repeated measures)
+        results = dg_analysis_empirical_correlation(dg_cfg, Y_orig, X_orig, rowIdx, nIterations, pX);
 
-            % sort rows as appropriate
-            [Y,X] = dg_sortRows(dg_cfg,Y_orig,X_orig,rowIdx,itIdx);
+    case 'empirical_FDR & 0  1'
+        % Independent groups t-test (independent groups, no repeated measures)
+        results = dg_analysis_empirical_ttestInd(dg_cfg, Y_orig, X_orig, rowIdx, nIterations, pX);
 
-            % perform test
-            [statVal, pVal] = corr(Y, X, 'type', corrType); % test
-  
-            if itIdx==1
-                statVal_obs           = statVal;
-                pVal_obs              = pVal;
-            end
+    case 'empirical_FDR & 1  0'
+        % Paired t-test (repeated measures, no independent groups)
+        results = dg_analysis_empirical_ttestPaired(dg_cfg, Y_orig, X_orig, rowIdx, nIterations, pX);
 
-            if itIdx==1
-                statVal_resamp = zeros(nIterations,pX);
-            end
-            statVal_resamp(itIdx,:) = statVal;
+    case 'theoretical_maxT & 0  0'
+        % Cluster-based correlation analysis
+        results = dg_analysis_theoretical_correlation(dg_cfg, Y_orig, X_orig, rowIdx, nIterations, Nall);
 
-            dg_counter(itIdx,nIterations)  % iteration counter
-        end
+    case 'theoretical_maxT & 0  1'
+        % Cluster-based independent groups t-test
+        results = dg_analysis_theoretical_ttestInd(dg_cfg, Y_orig, X_orig, rowIdx, nIterations, Nall);
 
-        % collate results
-        results.statVal_obs        = statVal_obs;
-        results.pVal_obs           = pVal_obs;
-        results.resampling.statVal_resamp = statVal_resamp;
+    case 'theoretical_maxT & 1  0'
+        % Cluster-based paired t-test
+        results = dg_analysis_theoretical_ttestPaired(dg_cfg, Y_orig, X_orig, rowIdx, nIterations, Nall);
 
-    case 'empiricalL1_FDR & 0  1  0' % -- independent sample t-test --
-        for itIdx = 1:nIterations
-            % sort rows as appropriate
-            [Y,X] = dg_sortRows(dg_cfg,Y_orig,X_orig,rowIdx,itIdx);
+    case {'PLS_SVD & 0  0', 'PLS_SVD & 1  0', 'PLS_SVD & 0  1', 'PLS_SVD & 1  1'}
+        % PLS-SVD multivariate analysis (all design codes)
+        results = dg_analysis_plsSVD(dg_cfg, Y_orig, X_orig, rowIdx, nIterations, Nall);
 
-            % perform test
-            varType = 'unequal';  % equal | unequal (for info see doc ttest2)
-            [~,p,~,stats] = ttest2(X(Y==max(Y),:),X(Y==min(Y),:),'Vartype',varType);
-            statVal = stats.tstat;
-            pVal = p;
-
-            if itIdx==1
-                statVal_obs           = statVal;
-                pVal_obs              = pVal;
-            end
-
-            if itIdx==1
-                statVal_resamp = zeros(nIterations,pX);
-            end
-            statVal_resamp(itIdx,:) = statVal;
-
-            dg_counter(itIdx,nIterations)  % iteration counter
-        end
-
-        % collate results
-        results.statVal_obs        = statVal_obs;
-        results.pVal_obs           = pVal_obs;
-        results.resampling.statVal_resamp = statVal_resamp;
-
-    case 'empiricalL1_FDR & 0  0  1' % -- paired sample t-test --
-        for itIdx = 1:nIterations
-
-            % sort rows as appropriate
-            [Y,X] = dg_sortRows(dg_cfg,Y_orig,X_orig,rowIdx,itIdx);
-
-            % rows of conditions belonging to first and second halves
-            cond_firstHalf = 1:length(Y)/2;
-            cond_secondHalf = 1+length(Y)/2:length(Y);
-            % rows of conditions with the largest and lowest constrast code
-            % ie, find which hald corresponds with the largest constrast code
-            contCodes = [unique(Y(cond_firstHalf)) unique(Y(cond_secondHalf))];
-            [~, sortIdx] = sort(contCodes,'descend');
-            if diff(sortIdx)<0
-                cond_maxHalf = cond_secondHalf;
-                cond_minHalf = cond_firstHalf;
-            else
-                cond_maxHalf = cond_firstHalf;
-                cond_minHalf = cond_secondHalf;
-            end
-
-            % perform test
-            [~,p,~,stats] = ttest(X(cond_maxHalf,:),X(cond_minHalf,:));
-            statVal = stats.tstat;
-            pVal = p;
-
-            if itIdx==1
-                statVal_obs           = statVal;
-                pVal_obs              = pVal;
-            end
-
-            if itIdx==1
-                statVal_resamp = zeros(nIterations,pX);
-            end
-            statVal_resamp(itIdx,:) = statVal;
-
-            dg_counter(itIdx,nIterations)  % iteration counter
-        end
-
-        % collate results
-        results.statVal_obs        = statVal_obs;
-        results.pVal_obs           = pVal_obs;
-        results.resampling.statVal_resamp = statVal_resamp;
-
-    case 'theoreticalL1_clusterMaxT & 1  0  0' % -- correlation --
-
-        % initialize lvl2 (cluster) metrics
-        resampling  = repmat(struct('id', [], 'size', [], 'mass', []), 1, nIterations);
-
-        % choose analysis subtype
-        list = ["Pearson" "Spearman" "Kendall" "cylindrical"];
-        [idx,tf] = listdlg('ListString',list,'SelectionMode','single','ListSize',[160 100],'PromptString','choose correlation type');
-        if tf==0; idx=1; warning('You did not choose correlation type. I chose for you: Pearson'); end
-        corrType = list(idx);
-        if strcmp(corrType,'cylindrical')
-            error('not coded yet') % it will require its own function to keep things tidy
-        end
-
-        for itIdx = 1:nIterations
-
-            % sort rows as appropriate
-            [Y,X] = dg_sortRows(dg_cfg,Y_orig,X_orig,rowIdx,itIdx);
-
-            % perform test
-            [statVal, pVal] = corr(Y, X, 'type', corrType); % test
-
-            % form clusters
-            [clusterMembership, clustIDList, metrics] = dg_clusterForming(dg_cfg, statVal ,pVal);
-
-            if itIdx==1
-                statVal_obs           = statVal;
-                pVal_obs              = pVal;
-                clusterMembership_obs = clusterMembership ;
-                clustIDList_obs       = clustIDList ;
-                metrics_obs           = metrics;
-            end
-
-            switch dg_cfg.objective
-                case 'permutationH0testing'
-                    resampling(1,itIdx) = metrics;
-
-                case 'bootstrapStability'
-                    if itIdx==1
-                        statVal_boot = zeros(nIterations,Nall);
-                    end
-                    statVal_boot(itIdx,:) = statVal;
-            end
-
-            dg_counter(itIdx,nIterations)  % iteration counter
-        end
-
-        % collate results
-        results.statVal_obs                    = statVal_obs;
-        results.pVal_obs                       = pVal_obs;
-        results.clusters.clusterMembership_obs = clusterMembership_obs;
-        results.clusters.clustIDList_obs       = clustIDList_obs;
-        results.clusters.metrics_obs           = metrics_obs;
-        
-        switch dg_cfg.objective
-            case 'permutationH0testing'
-                results.resampling.metrics           = resampling;
-            case 'bootstrapStability'
-                results.resampling.statVal_boot      = statVal_boot(:,:);
-        end
-
-    case 'theoreticalL1_clusterMaxT & 0  1  0' % -- independent sample t-test --
-
-        % initialize lvl2 (cluster) metrics
-        resampling  = repmat(struct('id', [], 'size', [], 'mass', []), 1, nIterations);
-
-        for itIdx = 1:nIterations
-
-            % sort rows as appropriate
-            [Y,X] = dg_sortRows(dg_cfg,Y_orig,X_orig,rowIdx,itIdx);
-
-            % perform test
-            varType = 'unequal';  % equal | unequal (for info see doc ttest2)
-            [~,p,~,stats] = ttest2(X(Y==max(Y),:),X(Y==min(Y),:),'Vartype',varType);
-            statVal = stats.tstat;
-            pVal = p;
-
-            % form clusters
-            [clusterMembership, clustIDList, metrics] = dg_clusterForming(dg_cfg, statVal ,pVal);
-
-            if itIdx==1
-                statVal_obs           = statVal;
-                pVal_obs              = pVal;
-                clusterMembership_obs = clusterMembership ;
-                clustIDList_obs       = clustIDList ;
-                metrics_obs           = metrics;
-            end
-
-            switch dg_cfg.objective
-                case 'permutationH0testing'
-                    resampling(1,itIdx) = metrics;
-
-                case 'bootstrapStability'
-                    if itIdx==1
-                        statVal_boot = zeros(nIterations,Nall);
-                    end
-                    statVal_boot(itIdx,:) = statVal;
-            end
-
-            dg_counter(itIdx,nIterations)  % iteration counter
-        end
-                
-        % collate results
-        results.statVal_obs                    = statVal_obs;
-        results.pVal_obs                       = pVal_obs;
-        results.clusters.clusterMembership_obs = clusterMembership_obs;
-        results.clusters.clustIDList_obs       = clustIDList_obs;
-        results.clusters.metrics_obs           = metrics_obs;
-
-        switch dg_cfg.objective
-            case 'permutationH0testing'
-                results.resampling.metrics           = resampling;
-            case 'bootstrapStability'
-                results.resampling.statVal_boot      = statVal_boot(:,:);
-        end
-
-    case 'theoreticalL1_clusterMaxT & 0  0  1' % -- paired sample t-test --
-
-        % initialize lvl2 (cluster) metrics
-        resampling  = repmat(struct('id', [], 'size', [], 'mass', []), 1, nIterations);
-
-        for itIdx = 1:nIterations
-
-            % sort rows as appropriate
-            [Y,X] = dg_sortRows(dg_cfg,Y_orig,X_orig,rowIdx,itIdx);
-
-             % rows of conditions belonging to first and second halves
-            cond_firstHalf = 1:length(Y)/2;
-            cond_secondHalf = 1+length(Y)/2:length(Y);
-            % rows of conditions with the largest and lowest constrast code
-            % ie, find which hald corresponds with the largest constrast code
-            contCodes = [unique(Y(cond_firstHalf)) unique(Y(cond_secondHalf))];
-            [~, sortIdx] = sort(contCodes,'descend');
-            if diff(sortIdx)<0
-                cond_maxHalf = cond_secondHalf;
-                cond_minHalf = cond_firstHalf;
-            else
-                cond_maxHalf = cond_firstHalf;
-                cond_minHalf = cond_secondHalf;
-            end
-
-            % perform test
-            [~,p,~,stats] = ttest(X(cond_maxHalf,:),X(cond_minHalf,:));
-            statVal = stats.tstat;
-            pVal = p;
-
-            % form clusters
-            [clusterMembership, clustIDList, metrics] = dg_clusterForming(dg_cfg, statVal ,pVal);
-
-            if itIdx==1
-                statVal_obs           = statVal;
-                pVal_obs              = pVal;
-                clusterMembership_obs = clusterMembership ;
-                clustIDList_obs       = clustIDList ;
-                metrics_obs           = metrics;
-            end
-
-            switch dg_cfg.objective
-                case 'permutationH0testing'
-                    resampling(1,itIdx) = metrics;
-
-                case 'bootstrapStability'
-                    if itIdx==1
-                        statVal_boot = zeros(nIterations,Nall);
-                    end
-                    statVal_boot(itIdx,:) = statVal;
-            end
-
-            dg_counter(itIdx,nIterations)  % iteration counter
-        end
-                
-        % collate results
-        results.statVal_obs                    = statVal_obs;
-        results.pVal_obs                       = pVal_obs;
-        results.clusters.clusterMembership_obs = clusterMembership_obs;
-        results.clusters.clustIDList_obs       = clustIDList_obs;
-        results.clusters.metrics_obs           = metrics_obs;
-
-        switch dg_cfg.objective
-            case 'permutationH0testing'
-                results.resampling.metrics           = resampling;
-            case 'bootstrapStability'
-                results.resampling.statVal_boot      = statVal_boot(:,:);
-        end
-
-    case {'PLS_SVD & 1  0  0'   'PLS_SVD & 0  1  0'   'PLS_SVD & 1  1  0'}
-        nModes = min(rank(Y),rank(X));
-
-        for itIdx = 1:nIterations
-
-            % sort rows as appropriate
-            [Y,X] = dg_sortRows(dg_cfg,Y_orig,X_orig,rowIdx,itIdx);
-
-            % mean center columns of Y and X
-            Yz = normalize(Y,'center');
-            Xz = normalize(X,'center');
-
-            % zscore columns of Y (optional)
-            if dg_cfg.pls_svdParams.zscoringVec(1)
-                Yz = zscore(Y);
-            end
-            % zscore columns of X (optional)
-            if dg_cfg.pls_svdParams.zscoringVec(2)
-                Xz = zscore(X);
-            end
-
-            % apply ignore mask (features in X)
-            Xz(:,logical(dg_cfg.R_ignore)) = 0;
-
-            % scale by frobenius norm (optional)
-            % DELETE THIS SECTION UNLESS JUSTIFIED
-            %                     if logical(dg_cfg.pls_svdParams.froFlag)
-            %                         Lz = Lz / norm(Lz,'fro');
-            %                         Rz = Rz / norm(Rz,'fro');
-            %                     end
-
-            % cross-product
-            %                     C = (Yz'*Xz_pca)/(m-1);  % for PCA
-            C = (Yz'*Xz)/(m-1);
-
-            % SVD
-            [U,S,V] = svd(C,"econ");
-
-            % sanity check: nModes as expected
-            if nModes~=size(S,1)
-                error('unexpected number of SVD modes')
-            end
-
-            % resolve sign uncertainty
-            % match SVD outcome with observed data
-            % only for last iteration
-            if itIdx==1
-                [U, V] = dg_signConvention(Yz,Xz,U,V);
-            end
-
-            % metrics: level-1 (feature based)
-            YU = Yz*U;
-            XV = Xz*V;
-
-            % metrics: level-2 (SV based)
-            s = diag(S); % singular value of each mode
-            p = s.^2 / sum(s.^2); % proportion of covariance explained by each mode
-            r = diag(corr(YU, XV)); % Pearson correlation between left and right latent variables (i.e., scores = data * singular vectors) per mode
-            % store the above as col vectors
-            s = s(:);
-            p = p(:);
-            r = r(:);
-
-
-            % store original-data values (observed)
-            if itIdx==1
-                U_obs = U;
-                V_obs = V;
-                YU_obs = YU;
-                XV_obs = XV;
-                s_obs = s';
-                p_obs = p';
-                r_obs = r';
-            end
-
-            % store output of each iteration as appropriate
-            switch dg_cfg.objective
-                case 'permutationH0testing'
-                    % initialize lvl2 (mode wise) metrics
-                    if itIdx==1
-                        resampling  = repmat(struct('s', [], 'inertia', [], 'wilk', [], 'sequential', []), 1, nIterations);
-                    end
-                    % fill each field per iteration
-                    resampling(:,itIdx).s = s;
-                    resampling(:,itIdx).inertia = sum(s);
-                    resampling(:,itIdx).wilk = flipud(cumsum(flipud(s(:).^2)));
-                    resampling(:,itIdx).sequential = cumsum(s(:).^2);
-
-                case 'bootstrapStability'
-                    % initialize lvl1 (loading wise) metrics
-                    % store singular and latent vectors (all iterations)
-                    if itIdx==1
-                        U_boot = zeros(size(Y,2),nModes,nIterations);
-                        V_boot = zeros(size(X,2),nModes,nIterations);
-                        YU_boot = zeros(size(Y,1),nModes,nIterations);
-                        XV_boot = zeros(size(X,1),nModes,nIterations);
-                    end
-                    U_boot(:,:,itIdx) = U;
-                    V_boot(:,:,itIdx) = V;
-                    YU_boot(:,:,itIdx) = YU;
-                    XV_boot(:,:,itIdx) = XV;
-            end
-
-            dg_counter(itIdx,nIterations)  % iteration counter
-        end
-
-        % collate results
-        % observed data
-        results.PLS_SVD.nModes = nModes;
-        results.PLS_SVD.s_obs = s_obs;
-        results.PLS_SVD.p_obs = p_obs;
-        results.PLS_SVD.r_obs = r_obs;
-        results.PLS_SVD.U_obs = U_obs;
-        results.PLS_SVD.V_obs = V_obs;
-        results.PLS_SVD.YU_obs = YU_obs;
-        results.PLS_SVD.XV_obs = XV_obs;
-
-        switch dg_cfg.objective
-            case 'permutationH0testing'
-                results.resampling     = resampling;
-            case 'bootstrapStability'
-                % all iterations at lvl1
-                results.resampling.U_boot   = U_boot(:,:,:);
-                results.resampling.V_boot   = V_boot(:,:,:);
-                results.resampling.YU_boot  = YU_boot(:,:,:);
-                results.resampling.XV_boot  = XV_boot(:,:,:);
-        end
-
-    otherwise % -- any other design --
-        error(['not yet coded: ' dg_cfg.objective ' ' num2str(dg_cfg.designCode)])
+    otherwise
+        % Any other analysis type/design code combination
+        error(['not yet coded: ' dg_cfg.analysis.type ' & ' num2str(dg_cfg.designCode)])
 end
 
 %% compute inferential metrics
