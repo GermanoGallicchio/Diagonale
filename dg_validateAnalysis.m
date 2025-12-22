@@ -15,7 +15,7 @@ else
     end
 end
 if dimensionUnvalidated
-    error('dg_cfg.dimensions not validated. use: pe_validateDimensions(dg_cfg)')
+    error('dg_cfg.dimensions not validated. use: dg_cfg = pe_validateDimensions(dg_cfg)')
 else
     dimKeys  = fieldnames(dg_cfg.dimensions);
     dimTypes = cellfun(@(k) dg_cfg.dimensions.(k).type, dimKeys, 'UniformOutput', false);
@@ -83,7 +83,15 @@ if strcmp(dg_cfg.analysis.type,'empiricalL1_FDR')
         % [0 1 0] corrects pvalues for dimension 2 separately for each level of the other dimensions
     end
 end
-    
+  
+% must have a dataStruct table (this explains how the data are structured, what each row represents)
+if ~isfield(dg_cfg.analysis,'dataStruct')
+    error('dg_cfg.analysis.dataStruct is needed informing on the structure of the data matrix')
+else
+    if ~istable(dg_cfg.analysis.dataStruct)
+        error('dg_cfg.analysis.dataStruct must be a table');
+    end
+end
 
 %% defaults
 
