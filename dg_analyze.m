@@ -1,4 +1,4 @@
-function results = dg_stats(dg_cfg, Y, X)
+function results = dg_analyze(dg_cfg, Y, X)
 % Main statistical analysis wrapper
 %
 % Front-end function that orchestrates the entire analysis pipeline:
