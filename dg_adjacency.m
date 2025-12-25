@@ -10,7 +10,7 @@ function [adjMatrix] = dg_adjacency(dg_cfg)
 % algorithm, which will not waste a huge amount of time checking whether
 % far away points are in the same cluster.
 % 
-% Criterion 1: Euclidean distance over all continuous dimensions
+% Criterion 1: Euclidean distance over all continuous dimensions (if present)
 % Criterion 2: Angular distance over spherical dimension (if present)
 % Categorical dimensions are not supported for adjacency computation.
 % 
@@ -90,7 +90,6 @@ dimGrids = cell(1, nDims);
 % end
 
 %% choose approach to implementation
-
 
 if Nall < 100000
     sparseApproach = 'fromLogical';
