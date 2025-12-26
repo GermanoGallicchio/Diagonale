@@ -242,10 +242,10 @@ end
 % compute p values for permutation testing (from H0 shuffling)
 % compute BR and CI for bootstrap stability (from resampling)
 
+results = di_inference(di_cfg,results);
+
 keyboard; % UNTIL HERE MAYBE OK
 
-results = di_inference(di_cfg,results);
-       
 %% cluster descriptive metrics
 
 results = di_describeClusters(di_cfg,results);
