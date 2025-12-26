@@ -136,13 +136,13 @@ for itIdx = 1:nIterations
         case 'permutationH0testing'
             % initialize cluster-level metrics
             if itIdx==1
-                simulatedMetrics = repmat(struct('id', [], 'size', [], 'mass', [], 'extremeVal', []), 1, nIterations);
+                simulatedMetrics = repmat(struct('id', [], 'size', [], 'mass', [], 'mostExtremeVal', []), 1, nIterations);
             end
 
             simulatedMetrics(1,itIdx).id         = metrics.id;
             simulatedMetrics(1,itIdx).size       = metrics.size;
             simulatedMetrics(1,itIdx).mass       = metrics.mass;
-            simulatedMetrics(1,itIdx).extremeVal = metrics.extremeVal;
+            simulatedMetrics(1,itIdx).mostExtremeVal = metrics.mostExtremeVal;
             
         case 'bootstrapStability'
             error('not yet coded')
@@ -168,7 +168,7 @@ switch di_cfg.analysis.objective
     case 'permutationH0testing'
 
         results.simulated.permutationH0.clusterMetrics = simulatedMetrics; % [1 x nIterations] array of struct
-        % each element contains: .id, .size, .mass, .extremeVal for clusters in that null iteration
+        % each element contains: .id, .size, .mass, .mostExtremeVal for clusters in that null iteration
         % (these will be used by di_maxT.m to compute corrected p-values per cluster)
         % Used to estimate H0 distribution of cluster metrics
         
