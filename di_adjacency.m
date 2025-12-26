@@ -22,6 +22,8 @@ function [adjMatrix] = di_adjacency(di_cfg)
 %                  Elements are 1 where points are considered "adjacent"
 %                  and might join the same cluster (they are candidate in
 %                  the cluster forming algorithm), 0 otherwise
+%
+% Author: Germano Gallicchio (germano.gallicchio@gmail.com)
 
 %% input sanity checks
 
@@ -176,7 +178,7 @@ switch sparseApproach
                 criterion1 = distSq <= distance_cont_euclid_sq;
             end
 
-            % Angular criterion for spherical dimension (if present)
+            % angular criterion for spherical dimension (if present)
             if ~isempty(sphIdx)
                 chanNeighIdx = find(sphericalDistanceMatrix(pIdx_subs{sphIdx(1)}, :) <= distance_spherical_radians);
                 criterion2 = ismember(sphGrid, chanNeighIdx);
