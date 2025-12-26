@@ -111,12 +111,13 @@ end
 
 
 % num of iterations 
+nIterations_lowerEdge = 5000; % note: a bit arbitrary
 if ~isfield(di_cfg.analysis,'nIterations')
-    di_cfg.analysis.nIterations = 5000;
+    di_cfg.analysis.nIterations = nIterations_lowerEdge;
     warning(['di_cfg.analysis.nIterations not provided. I am using ' num2str(di_cfg.analysis.nIterations) ' by default'])
 else
-    if di_cfg.analysis.nIterations < 5000
-        warning('analysis should be more stable if di_cfg.analysis.nIterations was at least 5000')
+    if di_cfg.analysis.nIterations < nIterations_lowerEdge
+        warning('analysis might be unstable if di_cfg.analysis.nIterations are fewer than %d', nIterations_lowerEdge)
     end
 end
 
