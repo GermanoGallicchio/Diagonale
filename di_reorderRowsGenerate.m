@@ -213,7 +213,12 @@ switch key
         end
 end
 
-%% Sanity checks: Verify resampling respects data structure
+%% sanity checks: Verify resampling respects data structure
+
+% sanity check: first iteration must be original data (unchanged)
+if ~isequal(rowIdx(:,1), (1:nRow)')
+    error('First iteration (rowIdx(:,1)) is not the original data sequence (1:nRow)');
+end
 
 % sanity check: for permutation, all rows are used exactly once per iteration
 if strcmp(di_cfg.analysis.objective, 'permutationH0testing')
