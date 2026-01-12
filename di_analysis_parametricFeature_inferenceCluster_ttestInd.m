@@ -13,15 +13,15 @@ function results = di_analysis_parametricFeature_inferenceCluster_ttestInd(di_cf
 % INPUT:
 %   di_cfg        - analysis configuration structure
 %   Y_orig        - group codes (m x 1) with exactly 2 unique values
-%   X_orig        - data matrix (m x Nall) where Nall = product of all dimensions
+%   X_orig        - data matrix (m x pX) where pX = product of all dimensions
 %   rowIdx        - resampling row indices from di_reorderRowsGenerate
 %
 % OUTPUT:
 %   results       - results structure:
-%     .observed.statVal       (1 x Nall) observed t-statistics per feature
-%     .observed.pVal          (1 x Nall) uncorrected p-values per feature
+%     .observed.statVal       (1 x pX) observed t-statistics per feature
+%     .observed.pVal          (1 x pX) uncorrected p-values per feature
 %     .observed.clusters      struct with:
-%       .clusterMembership_obs  (1 x Nall) cluster ID for each feature (0=not in cluster)
+%       .clusterMembership_obs  (1 x pX) cluster ID for each feature (0=not in cluster)
 %       .clustIDList_obs        vector of unique cluster IDs
 %       .metrics_obs            struct with size and mass per cluster
 %
@@ -32,7 +32,7 @@ function results = di_analysis_parametricFeature_inferenceCluster_ttestInd(di_cf
 %         Each contains cluster metrics from that null iteration
 %     
 %     for bootstrap stability 
-%       .simulated.bootstrapStability.values  (nIterations x Nall)
+%       .simulated.bootstrapStability.values  (nIterations x pX)
 %         Bootstrap resamples of feature-level t-statistics
 %
 % Author: Germano Gallicchio (germano.gallicchio@gmail.com)
@@ -45,10 +45,7 @@ nIterations = di_cfg.analysis.nIterations;
 % total number of features (product of all dimension sizes)
 dimKeys  = fieldnames(di_cfg.dimensions);
 dimSizes = cellfun(@(k) length(di_cfg.dimensions.(k).vec), dimKeys);
-Nall     = prod(dimSizes);
-
-% num of cols in matrix X
-pX       = size(X_orig, 2);
+pX       = prod(dimSizes);  % total number of X features
 
 % analysis objective and type
 analysisObjective = di_cfg.analysis.objective;
@@ -60,13 +57,13 @@ analysisType      = di_cfg.analysis.type;
 % --- general parameters ---
 
 % num of dimensions
-if Nall < 1
-    error('Nall must be at least 1 (total number of features)');
+if pX < 1
+    error('pX must be at least 1 (total number of features)');
 end
 
 % features in X matrix
-if size(X_orig, 2) ~= Nall
-    error('X_orig must have Nall columns, same number as features');
+if size(X_orig, 2) ~= pX
+    error('X_orig must have pX columns, same number as features');
 end
 
 % num of iterations
