@@ -15,14 +15,14 @@ else
     end
 end
 if dimensionUnvalidated
-    error('di_cfg.dimensions not validated. use: di_cfg = pe_validateDimensions(di_cfg)')
+    error('di_cfg.dimensions not validated. use: di_cfg = di_validateDimensions(di_cfg)')
 else
     dimKeys  = fieldnames(di_cfg.dimensions);
     dimTypes = cellfun(@(k) di_cfg.dimensions.(k).type, dimKeys, 'UniformOutput', false);
 end
 
 
-analysisTypes = {'empiricalFeature_inferenceFeature' 'parametricFeature_inferenceFeature' 'parametricFeature_inferenceCluster' 'PLSSVD' 'AJIVE'};
+analysisTypes = {'empiricalFeature_inferenceFeature' 'parametricFeature_inferenceFeature' 'parametricFeature_inferenceCluster' 'PLS_SVD' 'AJIVE'};
 analysisObjectives = {'permutationH0testing' 'bootstrapStability'};
 
 % di_cfg.analysis exists
@@ -55,33 +55,41 @@ if ~any(strcmp(di_cfg.analysis.objective,analysisObjectives))
 end
 
 
-
-if strcmp(di_cfg.analysis.type,'theoretical_cluster')
+% Cluster-based analysis: validate required cluster parameters
+if strcmp(di_cfg.analysis.type,'parametricFeature_inferenceCluster')
     if ~isfield(di_cfg.analysis,'clusterParams')
-        error('di_cfg.analysis.type = theoretical_cluster requires di_cfg.analysis.clusterParams')
+        error('di_cfg.analysis.type = parametricFeature_inferenceCluster requires di_cfg.analysis.clusterParams')
     else
         if any(strcmp(dimTypes,'continuous'))
             if ~isfield(di_cfg.analysis.clusterParams,'distance_continuous_index')
-                error('di_cfg.analysis.type = parametricFeature_inferenceCluster with continuous dimensions requires di_cfg.analysis.clusterParams.distance_continuous_index (e.g., = 1)')
+                error('parametricFeature_inferenceCluster with continuous dimensions requires clusterParams.distance_continuous_index (e.g., = 1)')
             end
         end
         if any(strcmp(dimTypes,'spherical'))
             if ~isfield(di_cfg.analysis.clusterParams,'distance_spherical_radians')
-                error('di_cfg.analysis.type = parametricFeature_inferenceCluster with spherical dimensions requires di_cfg.analysis.clusterParams.distance_spherical_radians (e.g., = 0.63)')
+                error('parametricFeature_inferenceCluster with spherical dimensions requires clusterParams.distance_spherical_radians (e.g., = 0.63)')
             end
         end
+        % adjacency matrix is necessary for cluster forming
+        if ~isfield(di_cfg.analysis.clusterParams,'adjacencyMatrix')
+            error('parametricFeature_inferenceCluster requires clusterParams.adjacencyMatrix')
+        end
     end
-    
 end
 
-if strcmp(di_cfg.analysis.type,'empirical_FDR')
+% Empirical feature-level analysis with permutation: FDR dimensions default
+if strcmp(di_cfg.analysis.type,'empiricalFeature_inferenceFeature') && strcmp(di_cfg.analysis.objective,'permutationH0testing')
     if ~isfield(di_cfg.analysis,'FDR_dimensions')
-        error('di_cfg.analysis.type = empirical_FDR requires di_cfg.analysis.FDR_dimensions')
-        % apply FDR correction to which dimensions? 
-        % example: 
-        % [1 1 1] corrects pvalues from all three dimensions at once; 
-        % [0 1 0] corrects pvalues for dimension 2 separately for each level of the other dimensions
+        di_cfg.analysis.FDR_dimensions = ones(1,length(fieldnames(di_cfg.dimensions)));
+        warning(['di_cfg.analysis.FDR_dimensions not provided. I am using ' num2str(di_cfg.analysis.FDR_dimensions) ' by default'])
+    else
+        if length(di_cfg.analysis.FDR_dimensions) ~= length(fieldnames(di_cfg.dimensions))
+            error('analysis.FDR_dimensions must match the number of dimensions');
+        end
     end
+elseif isfield(di_cfg.analysis,'FDR_dimensions')
+    % Provided but not applicable for the chosen type/objective
+    warning('di_cfg.analysis.FDR_dimensions provided but type/objective do not use FDR correction. I will ignore di_cfg.analysis.FDR_dimensions')
 end
   
 % must have a dataStruct table (this explains how the data are structured, what each row represents)
@@ -121,20 +129,14 @@ else
     end
 end
 
-
-if strcmp(di_cfg.analysis.type,'theoreticalL1_clusterMaxT')
-    if ~isfield(di_cfg.analysis.clusterParams,'clusterFormingPvalThreshold')
+% Default cluster forming p-threshold when clustering is used
+if strcmp(di_cfg.analysis.type,'parametricFeature_inferenceCluster')
+    if ~isfield(di_cfg.analysis,'clusterParams') || ~isfield(di_cfg.analysis.clusterParams,'clusterFormingPvalThreshold')
+        if ~isfield(di_cfg.analysis,'clusterParams')
+            di_cfg.analysis.clusterParams = struct();
+        end
         di_cfg.analysis.clusterParams.clusterFormingPvalThreshold = 0.05;
         warning(['di_cfg.analysis.clusterParams.clusterFormingPvalThreshold not provided. I am using ' num2str(di_cfg.analysis.clusterParams.clusterFormingPvalThreshold) ' by default'])
-    end
-end
-
-if isfield(di_cfg.analysis,'FDR_dimensions')
-    if strcmp(di_cfg.analysis.type,'empiricalL1_FDR')
-        di_cfg.analysis.FDR_dimensions = ones(1,length(fieldnames(di_cfg.dimensions)));
-        warning(['di_cfg.analysis.FDR_dimensions not provided. I am using ' num2str(di_cfg.analysis.FDR_dimensions) ' by default'])
-    else
-        warning('you have defined FDR dimension but you have chosen di_cfg.analysis.type that does not use FDR correction. I will ignore di_cfg.analysis.FDR_dimensions')
     end
 end
 
