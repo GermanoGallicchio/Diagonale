@@ -137,7 +137,7 @@ dimKeys  = fieldnames(di_cfg.dimensions);
 dimTypes = cellfun(@(k) di_cfg.dimensions.(k).type, dimKeys, 'UniformOutput', false);
 dimSizes = cellfun(@(k) length(di_cfg.dimensions.(k).vec), dimKeys);
 nDims    = numel(dimKeys);
-Nall     = prod(dimSizes);
+pX       = prod(dimSizes);  % total number of X features across all dimensions
 
 contIdx = find(strcmp(dimTypes, 'continuous'));
 sphIdx  = find(strcmp(dimTypes, 'spherical'));
@@ -249,6 +249,5 @@ results = di_inference(di_cfg,results);
 
 results = di_describeClusters(di_cfg,results);
 
-keyboard; % UNTIL HERE MAYBE OK
 
 end
