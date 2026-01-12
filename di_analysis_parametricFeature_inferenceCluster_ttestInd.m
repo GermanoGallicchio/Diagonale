@@ -42,10 +42,17 @@ function results = di_analysis_parametricFeature_inferenceCluster_ttestInd(di_cf
 % number of iterations
 nIterations = di_cfg.analysis.nIterations;
 
-% Total number of features (product of all dimension sizes)
+% total number of features (product of all dimension sizes)
 dimKeys  = fieldnames(di_cfg.dimensions);
 dimSizes = cellfun(@(k) length(di_cfg.dimensions.(k).vec), dimKeys);
 Nall     = prod(dimSizes);
+
+% num of cols in matrix X
+pX       = size(X_orig, 2);
+
+% analysis objective and type
+analysisObjective = di_cfg.analysis.objective;
+analysisType      = di_cfg.analysis.type;
 
 %% sanity checks
 % validate input dimensions
@@ -84,7 +91,7 @@ end
 
 % --- specific to this analysis ---
 
-% Check that clustering parameters are configured
+% check that clustering parameters are configured
 if ~isfield(di_cfg.analysis, 'clusterParams')
     error('di_cfg.clusterParams must be defined for theoretical L1 analysis');
 end
@@ -102,10 +109,12 @@ end
 
 %% main analysis
 
+varType = 'unequal';  % equal | unequal (for info: see doc of ttest2)
+
 for itIdx = 1:nIterations
 
     % apply row reordering based on indices in rowIdx
-    [Y,X] = di_reorderRowsApply(di_cfg,Y_orig,X_orig,rowIdx,itIdx);
+    [Y,X] = di_reorderRowsApply(di_cfg, Y_orig, X_orig, rowIdx, itIdx);
 
     % validate exactly two groups
     % not needed because Y has already been validated above
@@ -113,10 +122,10 @@ for itIdx = 1:nIterations
     % if numel(groupVals) ~= 2
     %     error('independent t-test requires exactly two group codes in Y');
     % end
+    % DELETE SECTION ABOVE
 
     % perform independent sample t-test
     % note: category with larger Y compared vs category with lower Y
-    varType = 'unequal';  % equal | unequal (for info see doc ttest2)
     [~,p,~,stats] = ttest2(X(Y==max(Y),:),X(Y==min(Y),:),'Vartype',varType);
     statVal = stats.tstat;
     pVal = p;
@@ -124,6 +133,7 @@ for itIdx = 1:nIterations
     % cluster forming
     [clusterMembership, clustIDList, metrics] = di_clusterForming(di_cfg, statVal, pVal);
 
+    % capture observed values from first iteration
     if itIdx==1
         statVal_obs           = statVal;
         pVal_obs              = pVal;
@@ -132,13 +142,15 @@ for itIdx = 1:nIterations
         metrics_obs           = metrics;
     end
 
+    % store simulated values according to objective
     switch di_cfg.analysis.objective
         case 'permutationH0testing'
-            % initialize cluster-level metrics
+            % initialize on first iteration
             if itIdx==1
                 simulatedMetrics = repmat(struct('id', [], 'size', [], 'mass', [], 'mostExtremeVal', []), 1, nIterations);
             end
 
+            % fill structure
             simulatedMetrics(1,itIdx).id         = metrics.id;
             simulatedMetrics(1,itIdx).size       = metrics.size;
             simulatedMetrics(1,itIdx).mass       = metrics.mass;
@@ -155,8 +167,8 @@ end
 %% collate results
 
 % observed, feature level
-results.observed.statVal = statVal_obs;     % [1 x Nall] t-statistic per feature
-results.observed.pVal    = pVal_obs;        % [1 x Nall] p-value per feature
+results.observed.statVal = statVal_obs;     % [1 x pX] t-statistic per feature
+results.observed.pVal    = pVal_obs;        % [1 x pX] p-value per feature
 
 % observed, cluster level
 results.observed.clusters.clusterMembership_obs = clusterMembership_obs;
@@ -179,14 +191,14 @@ end
 %% validate output
 
 % verify structure consistency
-if size(results.observed.statVal, 2) ~= Nall
-    error('observed.statVal does not have Nall columns');
+if size(results.observed.statVal, 2) ~= pX
+    error('observed.statVal does not have pX columns');
 end
-if size(results.observed.pVal, 2) ~= Nall
-    error('observed.pVal does not have Nall columns');
+if size(results.observed.pVal, 2) ~= pX
+    error('observed.pVal does not have pX columns');
 end
-if size(results.observed.clusters.clusterMembership_obs, 2) ~= Nall
-    error('clusters.clusterMembership_obs does not have Nall columns');
+if size(results.observed.clusters.clusterMembership_obs, 2) ~= pX
+    error('clusters.clusterMembership_obs does not have pX columns');
 end
 
 % check that clusters were actually found
