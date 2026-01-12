@@ -56,7 +56,7 @@ if ~isempty(catIdx)
 end
 
 % Total number of points
-Nall = prod(dimSizes);
+pX = prod(dimSizes);
 
 % distance thresholds
 % continuous dimensios, if present
@@ -93,7 +93,7 @@ dimGrids = cell(1, nDims);
 
 %% choose approach to implementation
 
-if Nall < 100000
+if pX < 100000
     sparseApproach = 'fromLogical';
     % this was the first-ish approach
     % it creates first a logical N x N matrix, fills it, then convert it to sparse
@@ -110,10 +110,10 @@ end
 switch sparseApproach
     case 'fromLogical'
 
-        adjMatrix_logical = false(Nall,Nall); % initialize
+        adjMatrix_logical = false(pX,pX); % initialize
 
         % loop through each point and find its adjacent across all dimensions
-        for pIdx = 1:Nall
+        for pIdx = 1:pX
 
             % find the coordinates in the multidimensional grid for point pIdx
             pIdx_subs = cell(1, nDims);
@@ -144,12 +144,12 @@ switch sparseApproach
             end
 
             % nnz(criterion1 & criterion2); % just for curiosity
-            adjMatrix_logical(pIdx,:) = reshape(criterion1 & criterion2,[1, Nall]);
+            adjMatrix_logical(pIdx,:) = reshape(criterion1 & criterion2,[1, pX]);
             
             if pIdx==1
                 disp('computing the adjacency matrix')
             end
-            di_counter(pIdx,Nall);
+            di_counter(pIdx,pX);
         end
         
         adjMatrix = sparse(adjMatrix_logical);
@@ -163,7 +163,7 @@ switch sparseApproach
         a_idx = [];
         b_idx = [];
 
-        for pIdx = 1:Nall
+        for pIdx = 1:pX
             pIdx_subs = cell(1, nDims);
             [pIdx_subs{:}] = ind2sub(dimSizes, pIdx);
 
@@ -195,11 +195,11 @@ switch sparseApproach
             if pIdx==1
                 disp('computing the adjacency matrix')
             end
-            di_counter(pIdx,Nall);
+            di_counter(pIdx,pX);
         end
 
         value = 1;
-        adjMatrix = sparse(a_idx, b_idx, value, Nall, Nall);
+        adjMatrix = sparse(a_idx, b_idx, value, pX, pX);
         
 end
 
