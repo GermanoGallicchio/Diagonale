@@ -18,16 +18,23 @@ function [clusterMembership, clustIDList, clusterMetrics] = ...
 %       .size          - number of features in each cluster
 %       .mass          - sum of statistics in each cluster
 %       .medianVal     - median statistic value in each cluster
-%       .extremeIdx    - linear index of peak/trough (max absolute value)
-%       .extremeVal    - statistic value at extreme (preserves sign)
+%       .mostExtremeIdx    - linear index of peak/trough (max absolute value)
+%       .mostExtremeVal    - statistic value at extreme (preserves sign)
 %       .leastExtremeIdx - linear index of weakest point (min absolute value)
 %       .leastExtremeVal - statistic value at weakest point (preserves sign)
+%       .mostExtreme_coord - struct with per-dimension indices/values for extreme point
+%           .(dimKey).idx  - dimensional index of extreme in this dimension
+%           .(dimKey).val  - dimensional value of extreme in this dimension
+%       .leastExtreme_coord - struct with per-dimension indices/values for leastExtreme point
+%           .(dimKey).idx  - dimensional index of leastExtreme in this dimension
+%           .(dimKey).val  - dimensional value of leastExtreme in this dimension
 %       .extent_cont_dim  - struct with subfields for each continuous dimension
 %           .(dimKey).minIdx/maxIdx  - dimensional indices of extent bounds
 %           .(dimKey).minVal/maxVal  - dimensional values at extent bounds
 %       .extent_sph_dim   - struct with subfields for each spherical dimension
 %           .(dimKey).channelCount   - number of unique channels in cluster
-%           .(dimKey).channelIdx     - array of specific channel indices
+%           .(dimKey).channelIdx     - cell array of specific channel indices
+%           .(dimKey).channelLabel   - cell array of channel labels/names
 %
 % Note: dual role
 %   - inferential
@@ -174,8 +181,8 @@ if isempty(clustIDList)
     clusterMetrics.size = zeros(1, 0);
     clusterMetrics.mass = zeros(1, 0);
     clusterMetrics.medianVal = [];
-    clusterMetrics.extremeIdx = [];
-    clusterMetrics.extremeVal = [];
+    clusterMetrics.mostExtremeIdx = [];
+    clusterMetrics.mostExtremeVal = [];
     clusterMetrics.leastExtremeIdx = [];
     clusterMetrics.leastExtremeVal = [];
     clusterMetrics.extent_cont_dim = struct();
@@ -198,14 +205,16 @@ clusterMetrics.pointIdx = cell(1, numel(clustIDList));  % linear indices of clus
 clusterMetrics.size = zeros(1, numel(clustIDList));
 clusterMetrics.mass = zeros(1, numel(clustIDList));
 clusterMetrics.medianVal = zeros(1, numel(clustIDList));
-clusterMetrics.extremeIdx = zeros(1, numel(clustIDList));  % Peak/trough (max absolute value)
-clusterMetrics.extremeVal = zeros(1, numel(clustIDList));
+clusterMetrics.mostExtremeIdx = zeros(1, numel(clustIDList));  % Peak/trough (max absolute value)
+clusterMetrics.mostExtremeVal = zeros(1, numel(clustIDList));
 clusterMetrics.leastExtremeIdx = zeros(1, numel(clustIDList));  % Weakest point (min absolute value)
 clusterMetrics.leastExtremeVal = zeros(1, numel(clustIDList));
 
-% initialize extent structures for continuous and spherical dimensions
+% initialize extent and coordinate structures
 clusterMetrics.extent_cont_dim = struct();
 clusterMetrics.extent_sph_dim = struct();
+clusterMetrics.mostExtreme_coord = struct();
+clusterMetrics.leastExtreme_coord = struct();
 
 % get continuous and spherical dimension keys
 contDimIdx = find(strcmp(dimTypes, 'continuous'));
@@ -219,6 +228,11 @@ for dimIdx = contDimIdx
     clusterMetrics.extent_cont_dim.(dimKey).maxIdx = zeros(1, numel(clustIDList));
     clusterMetrics.extent_cont_dim.(dimKey).minVal = zeros(1, numel(clustIDList));
     clusterMetrics.extent_cont_dim.(dimKey).maxVal = zeros(1, numel(clustIDList));
+    % coordinate structures for extreme points
+    clusterMetrics.mostExtreme_coord.(dimKey).idx = zeros(1, numel(clustIDList));
+    clusterMetrics.mostExtreme_coord.(dimKey).val = zeros(1, numel(clustIDList));
+    clusterMetrics.leastExtreme_coord.(dimKey).idx = zeros(1, numel(clustIDList));
+    clusterMetrics.leastExtreme_coord.(dimKey).val = zeros(1, numel(clustIDList));
 end
 end
 
@@ -227,6 +241,12 @@ if ~isempty(sphDimIdx)
     sphKey = dimKeys{sphDimIdx};
     clusterMetrics.extent_sph_dim.(sphKey).channelCount = zeros(1, numel(clustIDList));
     clusterMetrics.extent_sph_dim.(sphKey).channelIdx = cell(1, numel(clustIDList));
+    clusterMetrics.extent_sph_dim.(sphKey).channelLabel = cell(1, numel(clustIDList));
+    % coordinate structures for extreme points
+    clusterMetrics.mostExtreme_coord.(sphKey).idx = zeros(1, numel(clustIDList));
+    clusterMetrics.mostExtreme_coord.(sphKey).label = cell(1, numel(clustIDList));
+    clusterMetrics.leastExtreme_coord.(sphKey).idx = zeros(1, numel(clustIDList));
+    clusterMetrics.leastExtreme_coord.(sphKey).label = cell(1, numel(clustIDList));
 end
 
 % fill the structure
@@ -251,8 +271,8 @@ for k = 1:numel(clustIDList)
     globalExtIdx = find(idx);
     globalExtIdx = globalExtIdx(localExtIdx);  % convert back to global index
     
-    clusterMetrics.extremeIdx(k) = globalExtIdx;  % idx of extreme
-    clusterMetrics.extremeVal(k) = statVal(globalExtIdx);  % statVal of extreme
+    clusterMetrics.mostExtremeIdx(k) = globalExtIdx;  % idx of extreme
+    clusterMetrics.mostExtremeVal(k) = statVal(globalExtIdx);  % statVal of extreme
     
     % least extreme: same as most extreme but min absolute value
     % the weakest point in the cluster
@@ -262,6 +282,43 @@ for k = 1:numel(clustIDList)
     
     clusterMetrics.leastExtremeIdx(k) = globalLeastIdx;  % idx or least extreme
     clusterMetrics.leastExtremeVal(k) = statVal(globalLeastIdx);  % statVal of least extreme
+    
+    % compute per-dimension coordinates for extreme points
+    [subs{1:nDims}] = ind2sub(dimSizes, globalExtIdx);  % extreme point subscripts
+    [subs_least{1:nDims}] = ind2sub(dimSizes, globalLeastIdx);  % leastExtreme point subscripts
+    
+    if ~isempty(contDimIdx)
+        for dimIdx = contDimIdx
+            dimKey = dimKeys{dimIdx};
+            dimVec = di_cfg.dimensions.(dimKey).vec;
+            
+            % Most extreme point coordinates
+            dimIdx_extreme = subs{dimIdx};
+            clusterMetrics.mostExtreme_coord.(dimKey).idx(k) = dimIdx_extreme;
+            clusterMetrics.mostExtreme_coord.(dimKey).val(k) = dimVec(dimIdx_extreme);
+            
+            % Least extreme point coordinates
+            dimIdx_least = subs_least{dimIdx};
+            clusterMetrics.leastExtreme_coord.(dimKey).idx(k) = dimIdx_least;
+            clusterMetrics.leastExtreme_coord.(dimKey).val(k) = dimVec(dimIdx_least);
+        end
+    end
+    
+    % Spherical dimension extreme point coordinates
+    if ~isempty(sphDimIdx)
+        sphKey = dimKeys{sphDimIdx};
+        sphVec = di_cfg.dimensions.(sphKey).vec;
+        
+        % Most extreme point channel
+        sphIdx_extreme = subs{sphDimIdx};
+        clusterMetrics.mostExtreme_coord.(sphKey).idx(k) = sphIdx_extreme;
+        clusterMetrics.mostExtreme_coord.(sphKey).label{k} = sphVec{sphIdx_extreme};
+        
+        % Least extreme point channel
+        sphIdx_least = subs_least{sphDimIdx};
+        clusterMetrics.leastExtreme_coord.(sphKey).idx(k) = sphIdx_least;
+        clusterMetrics.leastExtreme_coord.(sphKey).label{k} = sphVec{sphIdx_least};
+    end
     
     % continuous dimensions: extent (min/max) per dimension
     % For each continuous dimension, find the range of the cluster
@@ -294,11 +351,13 @@ for k = 1:numel(clustIDList)
     if ~isempty(sphDimIdx)
 
         sphKey = dimKeys{sphDimIdx};
+        sphVec = di_cfg.dimensions.(sphKey).vec;  % channel labels/names
         [subs{1:nDims}] = ind2sub(dimSizes, find(idx));
-        sphIndicesInCluster = subs{sphDimIdx};  % channel idxof cluster members
+        sphIndicesInCluster = subs{sphDimIdx};  % channel idx of cluster members
         uniqueSphIdx = unique(sphIndicesInCluster);  % remove duplicates
         
         clusterMetrics.extent_sph_dim.(sphKey).channelCount(k) = numel(uniqueSphIdx); % num of unique channels
         clusterMetrics.extent_sph_dim.(sphKey).channelIdx{k} = uniqueSphIdx;  % cell array for flexibility
+        clusterMetrics.extent_sph_dim.(sphKey).channelLabel{k} = sphVec(uniqueSphIdx);  % actual channel labels
     end
 end
