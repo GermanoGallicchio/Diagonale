@@ -157,9 +157,8 @@ end
 
 designCode = di_parseDesign(di_cfg,Y);
 
-% keep a copy of the designCode in the analysis and in the results
+% keep a copy of the designCode in the analysis
 di_cfg.analysis.designCode = designCode;
-results.designCode = designCode;
 
 %% perform the analysis
 
@@ -183,8 +182,6 @@ switch key
         results = di_analysis_empiricalFeature_inferenceFeature_correlation(di_cfg, Y_orig, X_orig, rowIdx);
 
     case 'empiricalFeature_inferenceFeature & 0  1'
-
-        keyboard; % UNTIL HERE MAYBE OK
         
         % independent sample/groups t-test
         % - empirical (via simulations) at feature level
@@ -238,16 +235,20 @@ switch key
         error(['not yet coded: ' di_cfg.analysis.type ' & ' num2str(di_cfg.analysis.designCode)])
 end
 
+% keep a copy of the analysis in the results
+results.analysis = di_cfg.analysis;
+
 %% compute inferential metrics
 % compute p values for permutation testing (from H0 shuffling)
 % compute BR and CI for bootstrap stability (from resampling)
 
 results = di_inference(di_cfg,results);
 
-keyboard; % UNTIL HERE MAYBE OK
-
 %% cluster descriptive metrics
+% this bit is only doing something if clusters are meaningful
 
 results = di_describeClusters(di_cfg,results);
+
+keyboard; % UNTIL HERE MAYBE OK
 
 end
