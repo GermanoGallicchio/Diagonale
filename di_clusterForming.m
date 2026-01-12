@@ -5,11 +5,11 @@ function [clusterMembership, clustIDList, clusterMetrics] = ...
 %
 % INPUT:
 %   di_cfg   - configuration with analysis.clusterParams.clusterFormingThreshold
-%   statVal  - (1 x Nall) test statistics
-%   pVal     - (1 x Nall) p-values or pseudo-significance mask
+%   statVal  - (1 x pX) test statistics
+%   pVal     - (1 x pX) p-values or pseudo-significance mask
 %
 % OUTPUT:
-%   clusterMembership - (1 x Nall) cluster ID per feature (0 = not in cluster)
+%   clusterMembership - (1 x pX) cluster ID per feature (0 = not in cluster)
 %   clustIDList       - unique cluster IDs
 %   clusterMetrics    - struct with descriptive metrics per cluster:
 %       .id            - cluster IDs matching clustIDList (natural numbers: 1, 2, 3, ...)
@@ -58,7 +58,7 @@ dimKeys  = fieldnames(di_cfg.dimensions);
 dimTypes = cellfun(@(k) di_cfg.dimensions.(k).type, dimKeys, 'UniformOutput', false);
 dimSizes = cellfun(@(k) length(di_cfg.dimensions.(k).vec), dimKeys);
 nDims    = numel(dimKeys);
-Nall     = prod(dimSizes);
+pX       = prod(dimSizes);  % total number of X features across all dimensions
 
 % categorical dimensions are not supported for clustering
 if any(strcmp(dimTypes, 'categorical'))
@@ -77,15 +77,15 @@ end
 pThreshold = di_cfg.analysis.clusterParams.clusterFormingPvalThreshold;
 ignoreMask = di_cfg.analysis.ignore_col;
 
-if size(statVal,2) ~= Nall
+if size(statVal,2) ~= pX
     warning('the dimensions of statMatrix do not agree with the configured dimensions');
     keyboard
 end
-if numel(ignoreMask) ~= Nall
+if numel(ignoreMask) ~= pX
     warning('ignore mask length does not match the configured dimensions');
     keyboard
 end
-if ~isequal(size(adjacencyMatrix,1), Nall) || ~isequal(size(adjacencyMatrix,2), Nall)
+if ~isequal(size(adjacencyMatrix,1), pX) || ~isequal(size(adjacencyMatrix,2), pX)
     warning('adjacency matrix size does not match the configured dimensions');
     keyboard
 end
@@ -94,12 +94,12 @@ end
 % by thresholding pvalues (or anything similar)
 % algorithm based on connected components analysis (REFERENCE)
 % starting point: 
-%   - a vector of (1 x Nall) values (eg, statistical values), 
-%   - adjacencyMatrix (Nall x Nall) telling which values are physically adjacent to which values
+%   - a vector of (1 x pX) values (eg, statistical values), 
+%   - adjacencyMatrix (pX x pX) telling which values are physically adjacent to which values
 
-% step 1: full graph from the adjacency matrix (Nall x Nall)
+% step 1: full graph from the adjacency matrix (pX x pX)
 % graph() builds a graph made of nodes and edges using a matrix
-% - nodes are all vlaues 1 to Nall
+% - nodes are all vlaues 1 to pX
 % - edges reèresent nonzero value at the intersection between two nodes
 %   - note: if the matrix is symmetric, the graph is nondirectional
 %   - note2: edge's magnitude does not matter
@@ -113,7 +113,7 @@ criterion2 = ~ignoreMask;       % not to be ignored
 % criterion3 will separate positive and negative values to process them independently
 
 % Initialize cluster membership array (all zeros = not in any cluster)
-clusterMembership = zeros(1, Nall);
+clusterMembership = zeros(1, pX);
 
 % Initialize cluster sign tracker (maps cluster ID to its sign: +1 or -1)
 clusterSign = [];
