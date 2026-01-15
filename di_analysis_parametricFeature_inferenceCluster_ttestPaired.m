@@ -51,7 +51,7 @@ analysisObjective = di_cfg.analysis.objective;
 analysisType      = di_cfg.analysis.type;
 
 %% sanity checks
-% Validate input dimensions
+% validate input dimensions
 
 % --- general parameters ---
 
@@ -122,7 +122,7 @@ for itIdx = 1:nIterations
     % apply row reordering based on indices in rowIdx
     [Y,X] = di_reorderRowsApply(di_cfg, Y_orig, X_orig, rowIdx, itIdx);
 
-    % --- find paired observations for paired t-test ---
+    % --- find paired observations for paired t-test --- start
     % for each observation ID, find the two condition measurements and pair them.
     % this is critical if the order of data is not tidy
     
@@ -183,6 +183,8 @@ for itIdx = 1:nIterations
     % trim to actual pairs used
     X_max = X_max_all(1:pairCount,:);
     X_min = X_min_all(1:pairCount,:);
+
+    % --- find paired observations for paired t-test --- end
     
     % perform paired test on aligned per-observation rows
     % note: category with larger Y compared vs category with lower Y
