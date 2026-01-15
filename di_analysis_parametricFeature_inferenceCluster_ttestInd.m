@@ -5,13 +5,12 @@ function results = di_analysis_parametricFeature_inferenceCluster_ttestInd(di_cf
 % Instead the p values are used to form clusters. cluster metrics are
 % extracted for observed and simulated data. Cluster metrics are used for either:
 % - permutation null hypothesis testing (permutationH0testing):
-%   - observed cluster metrics are compared against a null distribution of 
-%   simulated-data cluster metrics
+%   - observed cluster metrics are compared against a null distribution of simulated-data cluster metrics
 % - bootstrap stability (bootstrapStability):
 %   - not yet implemented
 %
 % INPUT:
-%   di_cfg        - analysis configuration structure
+%   di_cfg        - validated analysis configuration structure
 %   Y_orig        - group codes (m x 1) with exactly 2 unique values
 %   X_orig        - data matrix (m x pX) where pX = product of all dimensions
 %   rowIdx        - resampling row indices from di_reorderRowsGenerate
@@ -56,27 +55,27 @@ analysisType      = di_cfg.analysis.type;
 
 % --- general parameters ---
 
-% num of dimensions
+% num of dimensions must be at least 1
 if pX < 1
     error('pX must be at least 1 (total number of features)');
 end
 
-% features in X matrix
+% num of dimensions must be same as num of features in X matrix
 if size(X_orig, 2) ~= pX
     error('X_orig must have pX columns, same number as features');
 end
 
-% num of iterations
+% num of iterations must be at least 1
 if nIterations < 1
     error('nIterations must be at least 1');
 end
 
-% rowIdx has as many columns as iterations
+% num of iterations must be same as num of columns of rowIdx (resampling indices)
 if size(rowIdx, 2) ~= nIterations
     error('rowIdx must have nIterations columns');
 end
 
-% rows in Y and of rowIdx (resampling indices)
+% num of rows in Y must be same as num of rows of rowIdx (resampling indices)
 if size(rowIdx, 1) ~= size(Y_orig, 1)
     error('rowIdx must have same number of rows as Y_orig');
 end
@@ -90,15 +89,15 @@ end
 
 % check that clustering parameters are configured
 if ~isfield(di_cfg.analysis, 'clusterParams')
-    error('di_cfg.clusterParams must be defined for theoretical L1 analysis');
+    error('di_cfg.clusterParams must be defined for %s + %s', analysisObjective, analysisType);
 end
 
-% Y has only one column
+% Y has only one column for t-tests: one comparison only
 if size(Y_orig, 2) ~= 1
     error('Y_orig must be a column vector (m x 1)');
 end
 
-% check that Y has exactly 2 unique values
+% Y has exactly 2 unique values for t-tests: comparing two things
 unique_groups_orig = unique(Y_orig);
 if numel(unique_groups_orig) ~= 2
     error('Y_orig must have exactly 2 unique group codes for independent t-test');
@@ -113,14 +112,6 @@ for itIdx = 1:nIterations
     % apply row reordering based on indices in rowIdx
     [Y,X] = di_reorderRowsApply(di_cfg, Y_orig, X_orig, rowIdx, itIdx);
 
-    % validate exactly two groups
-    % not needed because Y has already been validated above
-    % groupVals = unique(Y);
-    % if numel(groupVals) ~= 2
-    %     error('independent t-test requires exactly two group codes in Y');
-    % end
-    % DELETE SECTION ABOVE
-
     % perform independent sample t-test
     % note: category with larger Y compared vs category with lower Y
     [~,p,~,stats] = ttest2(X(Y==max(Y),:),X(Y==min(Y),:),'Vartype',varType);
@@ -130,7 +121,7 @@ for itIdx = 1:nIterations
     % cluster forming
     [clusterMembership, clustIDList, metrics] = di_clusterForming(di_cfg, statVal, pVal);
 
-    % capture observed values from first iteration
+    % store observed values from first iteration
     if itIdx==1
         statVal_obs           = statVal;
         pVal_obs              = pVal;
@@ -140,7 +131,7 @@ for itIdx = 1:nIterations
     end
 
     % store simulated values according to objective
-    switch di_cfg.analysis.objective
+    switch analysisObjective
         case 'permutationH0testing'
             % initialize on first iteration
             if itIdx==1
@@ -148,9 +139,9 @@ for itIdx = 1:nIterations
             end
 
             % fill structure
-            simulatedMetrics(1,itIdx).id         = metrics.id;
-            simulatedMetrics(1,itIdx).size       = metrics.size;
-            simulatedMetrics(1,itIdx).mass       = metrics.mass;
+            simulatedMetrics(1,itIdx).id             = metrics.id;
+            simulatedMetrics(1,itIdx).size           = metrics.size;
+            simulatedMetrics(1,itIdx).mass           = metrics.mass;
             simulatedMetrics(1,itIdx).mostExtremeVal = metrics.mostExtremeVal;
             
         case 'bootstrapStability'
@@ -173,7 +164,7 @@ results.observed.clusters.clustIDList_obs       = clustIDList_obs;
 results.observed.clusters.metrics_obs           = metrics_obs;
 
 % simulated, cluster level
-switch di_cfg.analysis.objective
+switch analysisObjective
     case 'permutationH0testing'
 
         results.simulated.permutationH0.clusterMetrics = simulatedMetrics; % [1 x nIterations] array of struct
@@ -198,15 +189,17 @@ if size(results.observed.clusters.clusterMembership_obs, 2) ~= pX
     error('clusters.clusterMembership_obs does not have pX columns');
 end
 
-% check that clusters were actually found
+% check that clusters were actually formed
 if di_cfg.analysis.verbose
     if isempty(results.observed.clusters.clustIDList_obs)
-        warning('Diagonale: no clusters were found in observed data');
+        if di_cfg.clusterParams.clusterFormingThreshold > 0
+            warning('Diagonale: no clusters were found in observed data');
+        end
     end
 end
 
 % verify resampling structure
-switch di_cfg.analysis.objective
+switch analysisObjective
     case 'permutationH0testing'
         if length(results.simulated.permutationH0.clusterMetrics) ~= nIterations
             error('permutationH0.clusterMetrics does not have nIterations elements');
