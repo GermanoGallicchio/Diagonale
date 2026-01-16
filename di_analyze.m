@@ -173,14 +173,12 @@ key = sprintf('%s & %d  %d', di_cfg.analysis.type, di_cfg.analysis.designCode(1)
 switch key
     case 'empiricalFeature_inferenceFeature & 0  0'
 
-        keyboard; % UNTIL HERE MAYBE OK
-
         % correlation
         % - empirical (via simulations) at feature level
         % - FDR correction
         % - cluster forming (descriptive)
         results = di_analysis_empiricalFeature_inferenceFeature_correlation(di_cfg, Y_orig, X_orig, rowIdx);
-
+        
     case 'empiricalFeature_inferenceFeature & 0  1'
         
         % independent sample/groups t-test
@@ -191,22 +189,46 @@ switch key
 
     case 'empiricalFeature_inferenceFeature & 1  0'
 
-        keyboard; % UNTIL HERE MAYBE OK
-
         % paired sample t-test
         % - empirical (via simulations) at feature level
         % - FDR correction
         % - cluster forming (descriptive)
         results = di_analysis_empiricalFeature_inferenceFeature_ttestPaired(di_cfg, Y_orig, X_orig, rowIdx);
 
+    case 'parametricFeature_inferenceFeature & 0  0'
+        
+        keyboard; % UNTIL HERE OK
+
+        % correlation
+        % - theoretical at feature level (parametric p-values)
+        % - FDR correction
+        results = di_analysis_parametricFeature_inferenceFeature_correlation(di_cfg, Y_orig, X_orig, rowIdx);
+
+    case 'parametricFeature_inferenceFeature & 0  1'
+
+        keyboard; % UNTIL HERE OK
+
+        % independent sample/groups t-test
+        % - theoretical at feature level (t-distribution p-values)
+        % - FDR correction
+        results = di_analysis_parametricFeature_inferenceFeature_ttestInd(di_cfg, Y_orig, X_orig, rowIdx);
+
+    case 'parametricFeature_inferenceFeature & 1  0'
+
+        keyboard; % UNTIL HERE OK
+
+        % paired sample t-test
+        % - theoretical at feature level (t-distribution p-values)
+        % - FDR correction
+        results = di_analysis_parametricFeature_inferenceFeature_ttestPaired(di_cfg, Y_orig, X_orig, rowIdx);
+
     case 'parametricFeature_inferenceCluster & 0  0'
         
-        keyboard; % UNTIL HERE MAYBE OK
-
         % correlation
         % - theoretical at feature level
         % - cluster forming (for inference)
         results = di_analysis_parametricFeature_inferenceCluster_correlation(di_cfg, Y_orig, X_orig, rowIdx);
+
 
     case 'parametricFeature_inferenceCluster & 0  1'
         % independent sample/groups t-test
@@ -216,16 +238,14 @@ switch key
 
     case 'parametricFeature_inferenceCluster & 1  0'
 
-        keyboard; % UNTIL HERE MAYBE OK
-
         % paired sample t-test
         % - theoretical at feature level
         % - cluster forming (for inference)
         results = di_analysis_parametricFeature_inferenceCluster_ttestPaired(di_cfg, Y_orig, X_orig, rowIdx);
-
+        
     case {'PLS_SVD & 0  0', 'PLS_SVD & 1  0', 'PLS_SVD & 0  1', 'PLS_SVD & 1  1'}
 
-        keyboard; % UNTIL HERE MAYBE OK
+        keyboard; % UNTIL HERE OK
 
         % PLS-SVD multivariate analysis (all design codes)
         results = di_analysis_plsSVD(di_cfg, Y_orig, X_orig, rowIdx);
@@ -233,6 +253,8 @@ switch key
     otherwise
         % any other analysis type/design code combination
         error(['not yet coded: ' di_cfg.analysis.type ' & ' num2str(di_cfg.analysis.designCode)])
+
+        keyboard; % UNTIL HERE OK
 end
 
 % keep a copy of the analysis in the results
