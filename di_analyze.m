@@ -245,10 +245,10 @@ switch key
         
     case {'PLS_SVD & 0  0', 'PLS_SVD & 1  0', 'PLS_SVD & 0  1', 'PLS_SVD & 1  1'}
 
-        keyboard; % UNTIL HERE OK
-
         % PLS-SVD multivariate analysis (all design codes)
         results = di_analysis_plsSVD(di_cfg, Y_orig, X_orig, rowIdx);
+
+        keyboard; % UNTIL HERE OK
 
     otherwise
         % any other analysis type/design code combination
@@ -269,7 +269,7 @@ results = di_inference(di_cfg,results);
 %% cluster descriptive metrics
 % this bit is only doing something if clusters are meaningful
 
-results = di_describeClusters(di_cfg,results);
+results = di_clusterDescribe(di_cfg,results);
 
 
 end
