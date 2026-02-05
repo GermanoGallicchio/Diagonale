@@ -67,7 +67,18 @@ if strcmp(di_cfg.analysis.type,'parametricFeature_inferenceCluster')
         end
         if any(strcmp(dimTypes,'spherical'))
             if ~isfield(di_cfg.analysis.clusterParams,'distance_spherical_radians')
-                error('parametricFeature_inferenceCluster with spherical dimensions requires clusterParams.distance_spherical_radians (e.g., = 0.63)')
+                % Try to infer default based on number of channels
+                spherical_idx = find(strcmp(dimTypes,'spherical'));
+                nChannels = dimSizes(spherical_idx);
+                if nChannels == 32
+                    di_cfg.analysis.clusterParams.distance_spherical_radians = 0.63;
+                    warning('clusterParams.distance_spherical_radians not provided for 32-channel data. Using default: 0.63')
+                elseif nChannels == 128
+                    di_cfg.analysis.clusterParams.distance_spherical_radians = 0.36;
+                    warning('clusterParams.distance_spherical_radians not provided for 128-channel data. Using default: 0.36')
+                else
+                    error('parametricFeature_inferenceCluster with spherical dimensions requires clusterParams.distance_spherical_radians (e.g., = 0.63 for 32-channels or 0.36 for 128-channels)')
+                end
             end
         end
         % adjacency matrix is necessary for cluster forming
@@ -92,6 +103,26 @@ elseif isfield(di_cfg.analysis,'FDR_dimensions')
     warning('di_cfg.analysis.FDR_dimensions provided but type/objective do not use FDR correction. I will ignore di_cfg.analysis.FDR_dimensions')
 end
   
+
+
+% PLS SVD parameters 
+if strcmp(di_cfg.analysis.type,'PLS_SVD')
+    if ~isfield(di_cfg.analysis,'plssvdParams')
+        di_cfg.analysis.plssvdParams = struct();
+    end
+    % Default zscoring vector: [Y_zscored, X_zscored]
+    % Default [false, true]: suitable for Task PLS-SVD (Y is task codes/contrast, X needs z-scoring)
+    % For continuous associations (PLSCorrelation), manually set to [true, true] to z-score both X and Y
+    if ~isfield(di_cfg.analysis.plssvdParams,'zscoringVec')
+        di_cfg.analysis.plssvdParams.zscoringVec = [false, true];
+        warning('plssvdParams.zscoringVec not provided. Using default: [false, true] (X zscored, Y not zscored). For continuous associations, set to [true, true].')
+    end
+elseif isfield(di_cfg.analysis,'plssvdParams')
+    % provided but not applicable for the chosen type/objective
+    warning('di_cfg.analysis.plssvdParams provided but type/objective do not use PLS SVD. I will ignore di_cfg.analysis.plssvdParams')
+end
+
+
 % must have a dataStruct table (this explains how the data are structured, what each row represents)
 if ~isfield(di_cfg.analysis,'dataStruct')
     error('di_cfg.analysis.dataStruct is needed informing on the structure of the data matrix')
