@@ -149,6 +149,7 @@ if hasIndGroups
     designCode(2) = 1;  % independent groups of observations present
 end
 
+
 %% plot structure of Y
 
 if di_cfg.analysis.figFlag
