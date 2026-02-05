@@ -163,7 +163,7 @@ di_cfg.analysis.designCode = designCode;
 %% perform the analysis
 
 % get resampling indices
-rowIdx = di_reorderRowsGenerate(di_cfg);
+[rowIdx, di_cfg] = di_reorderRowsGenerate(di_cfg);
 
 %% delegate to appropriate analysis function based on type and design code
 
