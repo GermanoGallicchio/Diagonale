@@ -248,8 +248,6 @@ switch key
         % PLS-SVD multivariate analysis (all design codes)
         results = di_analysis_plsSVD(di_cfg, Y_orig, X_orig, rowIdx);
 
-        keyboard; % UNTIL HERE OK
-
     otherwise
         % any other analysis type/design code combination
         error(['not yet coded: ' di_cfg.analysis.type ' & ' num2str(di_cfg.analysis.designCode)])
