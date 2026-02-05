@@ -7,7 +7,7 @@ function rowIdx = di_reorderRowsGenerate(di_cfg)
 % row indices are based on experimental design (dataStruct) and analysis
 % type and objective. 
 %
-% the rowIdx output is then verified, and its verification checks can be seen when di_cfg.verbose = true
+% the rowIdx output is then verified, and its verification checks can be seen when di_cfg.analysis.verbose = true
 %
 % INPUT:
 %   di_cfg              - struct with fields:
@@ -263,7 +263,7 @@ if strcmp(di_cfg.analysis.objective, 'permutationH0testing')
             end
         end
     end
-    if di_cfg.verbose
+    if di_cfg.analysis.verbose
     fprintf('permutation with repeated measures verification: observation structure preserved\n');
     end
     end
@@ -362,7 +362,7 @@ if strcmp(di_cfg.analysis.objective, 'bootstrapStability')
             end
         end
     end
-    if di_cfg.verbose
+    if di_cfg.analysis.verbose
     fprintf('bootstrap verification: entire observations sampled with replacement\n');
     end
 end
