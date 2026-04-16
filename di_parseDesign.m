@@ -30,32 +30,35 @@ function designCode = di_parseDesign(di_cfg, Y)
 
 varLbl = di_cfg.analysis.dataStruct.Properties.VariableNames;
 
+% TO DO: delete this section
 % if indFactor# not entered in dataStruct: put 1s all over
-if ~any(startsWith(varLbl,'indFactor'))
-    warning('"indFactor#" column(s) in di_cfg.analysis.dataStruct not entered. I am assuming you do not want to compare between independent observations.')
-    disp('note: to achieve the same and not see the warning above create a di_cfg.analysis.dataStruct.indFactor1 variable and use all 1s)')
-    di_cfg.analysis.dataStruct.indFactor1 = ones(size(di_cfg.analysis.dataStruct,1),1);
-end
+% if ~any(startsWith(varLbl,'indFactor'))
+%     warning('"indFactor#" column(s) in di_cfg.analysis.dataStruct not entered. I am assuming you do not want to compare between independent observations.')
+%     disp('note: to achieve the same and not see the warning above create a di_cfg.analysis.dataStruct.indFactor1 variable and use all 1s)')
+%     di_cfg.analysis.dataStruct.indFactor1 = ones(size(di_cfg.analysis.dataStruct,1),1);
+% end
 
+% TO DO: delete this section
 % if repFactor# not entered in dataStruct: put 1s all over
-if ~any(startsWith(varLbl,'repFactor'))
-    warning('"repFactor#" column(s) in di_cfg.analysis.dataStruct not entered. I am assuming you do not want to compare between repeated observations.')
-    disp('note: to achieve the same and not see the warning above create a di_cfg.analysis.dataStruct.repFactor1 variable and use all 1s)')
-    di_cfg.analysis.dataStruct.repFactor1 = ones(size(di_cfg.analysis.dataStruct,1),1);
-end
+% if ~any(startsWith(varLbl,'repFactor'))
+%     warning('"repFactor#" column(s) in di_cfg.analysis.dataStruct not entered. I am assuming you do not want to compare between repeated observations.')
+%     disp('note: to achieve the same and not see the warning above create a di_cfg.analysis.dataStruct.repFactor1 variable and use all 1s)')
+%     di_cfg.analysis.dataStruct.repFactor1 = ones(size(di_cfg.analysis.dataStruct,1),1);
+% end
 
+% TO DO: delete this section
 % dataStruct must include one observationID column
-if ~any(contains(varLbl,'observationID'))
-    warning('"observationID" column in di_cfg.analysis.dataStruct not entered. I might make a guess in a future version... but not yet.')
-    %disp('note: if my guess is not accurate create a di_cfg.analysis.dataStruct.observationID variable)')
-    error('di_cfg.analysis.dataStruct.observationID is needed')
-end
+% if ~any(contains(varLbl,'observationID'))
+%     warning('"observationID" column in di_cfg.analysis.dataStruct not entered. I might make a guess in a future version... but not yet.')
+%     %disp('note: if my guess is not accurate create a di_cfg.analysis.dataStruct.observationID variable)')
+%     error('di_cfg.analysis.dataStruct.observationID is needed')
+% end
 
 % update varLbl
-varLbl = di_cfg.analysis.dataStruct.Properties.VariableNames;
+% varLbl = di_cfg.analysis.dataStruct.Properties.VariableNames;
 
 %% pull information from the table
-% older // delete
+% TO DO: delete this cell
 
 % % nIterations = di_cfg.analysis.nIterations;  % delete this line
 % 
@@ -113,6 +116,7 @@ if length(unique(obsID_counts)) > 1
 end
 
 %% sanity checks
+% TO DO: delete this cell
 % delete this cell because it won't work (hence it wont be useful) if the
 % design is unbalanced whereby subjs have different number of rep measures
 
