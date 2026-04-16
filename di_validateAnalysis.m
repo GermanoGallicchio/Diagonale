@@ -1,61 +1,67 @@
 function di_cfg = di_validateAnalysis(di_cfg)
-% Validate presence of required fields in di_cfg.analysis
+% Validate di_cfg.analysis
+% 0. check dimensions have been validated upstream
+% 1. sanity checking required fields (and potentially add some as defaults)
+% 2. add a "validated" flag
 
-% make sure the dimensions are validated prior to this function
-if ~isfield(di_cfg,'validation')
-    dimensionUnvalidated = true;
-else
-    dimensionUnvalidated = false;
-    if ~isfield(di_cfg.validation,'dimensions')
-        dimensionUnvalidated = true;
-    else
-        if ~di_cfg.validation.dimensions
-            dimensionUnvalidated = true;
-        end
-    end
-end
-if dimensionUnvalidated
-    error('di_cfg.dimensions not validated. use: di_cfg = di_validateDimensions(di_cfg)')
-else
-    dimKeys  = fieldnames(di_cfg.dimensions);
-    dimTypes = cellfun(@(k) di_cfg.dimensions.(k).type, dimKeys, 'UniformOutput', false);
-end
-
+%% analysis types and objectives supported by Diagonale
 
 analysisTypes = {'empiricalFeature_inferenceFeature' 'parametricFeature_inferenceFeature' 'parametricFeature_inferenceCluster' 'PLS_SVD' 'AJIVE'};
 analysisObjectives = {'permutationH0testing' 'bootstrapStability'};
 
-% di_cfg.analysis exists
+%% check dimensions have been validated
+
+% make sure the dimensions are validated prior to this function
+dimensionValidation = false; % initialize it false
+if isfield(di_cfg,'validation')
+    if isfield(di_cfg.validation,'dimensions')
+        dimensionValidation = true;
+    end
+end
+
+if dimensionValidation==false
+    error('di_cfg.dimensions not validated. use: di_cfg = di_validateDimensions(di_cfg)')
+end
+
+%% shortcuts
+
+% dimensions
+dimKeys  = fieldnames(di_cfg.dimensions);
+dimTypes = cellfun(@(k) di_cfg.dimensions.(k).type, dimKeys, 'UniformOutput', false);
+
+%%
+
+% sanity check: di_cfg.analysis exists
 if ~isfield(di_cfg,'analysis')
     error('di_cfg needs field: analysis');
 end
 
-% di_cfg.analysis.type exists
+% sanity check: di_cfg.analysis.type exists
 if ~isfield(di_cfg.analysis,'type')
     error('di_cfg.analysis needs field: type');
 end
 
-% di_cfg.analysis.objective exists
+% sanity check: di_cfg.analysis.objective exists
 if ~isfield(di_cfg.analysis,'objective')
     error('di_cfg.analysis needs field: objective');
 end
 
-% analysis.type must be of the allowed kind
+% sanity check: analysis.type must be of the allowed kind
 if ~any(strcmp(di_cfg.analysis.type,analysisTypes))
     disp("allowed types: ")
     disp(analysisTypes')
     error('di_cfg.analysis.type must be of any of the allowed types');
 end
 
-% analysis.objective must be of the allowed objectives
+% sanity check: analysis.objective must be of the allowed objectives
 if ~any(strcmp(di_cfg.analysis.objective,analysisObjectives))
     disp("allowed objectives: ")
     disp(analysisObjectives)
     error('di_cfg.analysis.objective must be of any of the allowed objectives');
 end
 
-
-% Cluster-based analysis: validate required cluster parameters
+% --- cluster specific ---
+% cluster-based analysis: validate required cluster parameters
 if strcmp(di_cfg.analysis.type,'parametricFeature_inferenceCluster')
     if ~isfield(di_cfg.analysis,'clusterParams')
         error('di_cfg.analysis.type = parametricFeature_inferenceCluster requires di_cfg.analysis.clusterParams')
@@ -88,6 +94,7 @@ if strcmp(di_cfg.analysis.type,'parametricFeature_inferenceCluster')
     end
 end
 
+% --- FDR specific ---
 % Empirical feature-level analysis with permutation: FDR dimensions default
 if strcmp(di_cfg.analysis.type,'empiricalFeature_inferenceFeature') && strcmp(di_cfg.analysis.objective,'permutationH0testing')
     if ~isfield(di_cfg.analysis,'FDR_dimensions')
@@ -104,7 +111,7 @@ elseif isfield(di_cfg.analysis,'FDR_dimensions')
 end
   
 
-
+% --- PLS SVD specific ---
 % PLS SVD parameters 
 if strcmp(di_cfg.analysis.type,'PLS_SVD')
     if ~isfield(di_cfg.analysis,'plssvdParams')
@@ -115,15 +122,17 @@ if strcmp(di_cfg.analysis.type,'PLS_SVD')
     % For continuous associations (PLSCorrelation), manually set to [true, true] to z-score both X and Y
     if ~isfield(di_cfg.analysis.plssvdParams,'zscoringVec')
         di_cfg.analysis.plssvdParams.zscoringVec = [false, true];
-        warning('plssvdParams.zscoringVec not provided. Using default: [false, true] (X zscored, Y not zscored). For continuous associations, set to [true, true].')
+        warning('analysis.plssvdParams.zscoringVec not provided. Using default: [false, true] (X zscored, Y not zscored). For continuous associations, set to [true, true].')
     end
 elseif isfield(di_cfg.analysis,'plssvdParams')
     % provided but not applicable for the chosen type/objective
     warning('di_cfg.analysis.plssvdParams provided but type/objective do not use PLS SVD. I will ignore di_cfg.analysis.plssvdParams')
 end
 
+%% dataStruct
+% analysis.dataStruct table explains how the data are structured, what each row represents)
 
-% must have a dataStruct table (this explains how the data are structured, what each row represents)
+% sanity check: analysis.dataStruct exists and is a table 
 if ~isfield(di_cfg.analysis,'dataStruct')
     error('di_cfg.analysis.dataStruct is needed informing on the structure of the data matrix')
 else
@@ -132,11 +141,45 @@ else
     end
 end
 
+% normalise missing columns so downstream code (di_parseDesign,
+% di_reorderRowsGenerate) always sees a complete dataStruct.
+% only adds columns that are not already present; never overwrites user-supplied columns.
+varNames = di_cfg.analysis.dataStruct.Properties.VariableNames;
+nRows    = height(di_cfg.analysis.dataStruct);
+if ~any(strcmp(varNames, 'observationID'))
+    di_cfg.analysis.dataStruct.observationID = (1:nRows)';
+    warning('dataStruct has no observationID column. Adding observationID = (1:%d)'' (assuming each row is a unique independent observation).', nRows)
+    disp('note: if my assumption is not correct, create a di_cfg.analysis.dataStruct.observationID variable)')
+end
+if ~any(startsWith(varNames, 'indFactor'))
+    di_cfg.analysis.dataStruct.indFactor1 = ones(nRows, 1);
+    warning('dataStruct has no indFactor# column. Adding indFactor1 = ones(%d,1) (treating all observations as one group).', nRows)
+    disp('I am assuming you do not want to compare between independent observations.')
+    disp('note: to achieve the same and not see the warning above, create a di_cfg.analysis.dataStruct.indFactor1 variable and use all 1s)')
+end
+if ~any(startsWith(varNames, 'repFactor'))
+    di_cfg.analysis.dataStruct.repFactor1 = ones(nRows, 1);
+    warning('dataStruct has no repFactor# column. Adding repFactor1 = ones(%d,1) (treating all observations as one condition).', nRows)
+    disp('I am assuming you do not want to compare between repeated observations.')
+    disp('note: to achieve the same and not see the warning above, create a di_cfg.analysis.dataStruct.repFactor1 variable and use all 1s)')
+end
+
+
+
 %% defaults
 
 if ~isfield(di_cfg.analysis,'randomSeed')
     di_cfg.analysis.randomSeed = 42;
     warning(['di_cfg.analysis.randomSeed not provided. I am using ' num2str(di_cfg.analysis.randomSeed) ' by default'])
+end
+
+% random seed validation (primary validation point)
+if ~isscalar(di_cfg.analysis.randomSeed) || ~isnumeric(di_cfg.analysis.randomSeed) || ...
+        ~isfinite(di_cfg.analysis.randomSeed)
+    error('analysis.randomSeed must be a finite numeric scalar')
+end
+if di_cfg.analysis.randomSeed ~= round(di_cfg.analysis.randomSeed)
+    error('analysis.randomSeed must be integer-valued (e.g., 42)')
 end
 
 
