@@ -1,16 +1,24 @@
 function di_cfg = di_validateDimensions(di_cfg)
-% Validate presence of required fields in di_cfg.dimensions and include basic computations for shortcuts later on.
+% Validate di_cfg.dimensions
+% 1. sanity checking required fields (and potentially add some as defaults)
+% 2. add a "validated" flag
+
+%% dimension types supported by Diagonale
 
 dimensionTypes = {'continuous' 'spherical' 'categorical'};
 
+%%
+% sanity check: di_cfg.dimensions exists
 if ~isfield(di_cfg,'dimensions')
     error('di_cfg needs field: dimensions');
 end
 
+% sanity check: subfields of di_cfg.dimensions need to start with "d"
 if any(~startsWith(fieldnames(di_cfg.dimensions),'d'))
     error('di_cfg.dimensions dimensions need to start with d');
 end
 
+% sanity check: subfields of di_cfg.dimensions need to be of the form "d" followed by a number
 pattern = "d" + digitsPattern();
 if any(~contains(fieldnames(di_cfg.dimensions),pattern))
     error('di_cfg.dimensions dimensions need to be labeled as d followed by a number');
@@ -18,20 +26,33 @@ end
 
 dims = fieldnames(di_cfg.dimensions);
 for dIdx = 1:length(dims)
+
+    % --- type ---
+    % sanity check: di_cfg.dimensions.d#.type needs to exist
+    % TO DO: potentially change to using isfield()
     if ~any(strcmp(fieldnames(di_cfg.dimensions.(dims{dIdx})),'type'))
         error('di_cfg.dimensions dimensions need to contain a type field');    
     end
+
+    % sanity check: di_cfg.dimensions.d#.type needs to be one of the supported types
     if ~any(strcmp(di_cfg.dimensions.(dims{dIdx}).type,dimensionTypes))
         disp("allowed types: ")
         disp(dimensionTypes)
         error('di_cfg.dimensions dimensions need to contain a type field of any allowed type');    
     end
+
+    % --- vec ---
+    % sanity check: di_cfg.dimensions.d#.vec needs to exist
     if ~any(strcmp(fieldnames(di_cfg.dimensions.(dims{dIdx})),'vec'))
         error('di_cfg.dimensions dimensions need to contain a vec field');    
     end
+
+    % sanity check: di_cfg.dimensions.d#.vec is an actual vector
     if sum(size(di_cfg.dimensions.(dims{dIdx}).vec)~=1)~=1
         error('di_cfg.dimensions.d*.vec must be a vector of non unit length')
     end
+
+    % --- coord --- only for spherical dimensions
     if strcmp(di_cfg.dimensions.(dims{dIdx}).type,'spherical')
         if ~isfield(di_cfg.dimensions.(dims{dIdx}),'coord')
             error('di_cfg.dimensions.d* of spherical type must have a coord field')
@@ -57,17 +78,25 @@ for dIdx = 1:length(dims)
     end
 end
 
+%% defaults
+
 for dIdx = 1:length(dims)
+
+    % di_cfg.dimensions.d#.lbl = d# + type
     if ~isfield(di_cfg.dimensions.(dims{dIdx}),'lbl')
         dimLbl = [dims{dIdx}  di_cfg.dimensions.(dims{dIdx}).type];
         warning(['Diagonale: label not provided by user for dimension ' dims{dIdx} '. Using this label: ' dimLbl])
         di_cfg.dimensions.(dims{dIdx}).lbl = dimLbl;
     end
+
+    % di_cfg.dimensions.d#.units
     if ~isfield(di_cfg.dimensions.(dims{dIdx}),'units')
         dimUnits = 'undefinedunits';
         warning(['Diagonale: units not provided by user for dimension ' dims{dIdx} ' (' di_cfg.dimensions.(dims{dIdx}).lbl ') . Using this label: ' dimUnits])
         di_cfg.dimensions.(dims{dIdx}).units = dimUnits;
     end
+
+    % di_cfg.dimensions.d#.coord.sphRadius = 1
     if strcmp(di_cfg.dimensions.(dims{dIdx}).type,'spherical')
         if ~isfield(di_cfg.dimensions.(dims{dIdx}).coord,'sphRadius')
             di_cfg.dimensions.(dims{dIdx}).coord.sphRadius = ones(size(di_cfg.dimensions.(dims{dIdx}).vec));
@@ -76,11 +105,14 @@ for dIdx = 1:length(dims)
     end
 end
 
+%% add 'num' subfield of each dimension for numerosity
+
 for dIdx = 1:length(dims)
     nVec = length(di_cfg.dimensions.(dims{dIdx}).vec);
     di_cfg.dimensions.(dims{dIdx}).num = nVec;
 end
 
+%% validation done
 
 % add a validated flag
 di_cfg.validation.dimensions = true;
