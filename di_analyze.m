@@ -1,7 +1,5 @@
 function results = di_analyze(di_cfg, Y, X)
-% Main statistical analysis wrapper
-%
-% Front-end function that orchestrates the entire analysis pipeline:
+% Front-end wrapper function that orchestrates the entire analysis pipeline:
 % design detection, validation, permutation/bootstrap resampling, and 
 % statistical testing. Supports correlation, independent groups, repeated 
 % measures, and mixed designs using regression or PLS-SVD.
@@ -12,7 +10,7 @@ function results = di_analyze(di_cfg, Y, X)
 %                 .analysis.type ('empiricalFeature_inferenceFeature', 'parametricFeature_inferenceFeature', or 'parametricFeature_inferenceCluster')
 %   X           - Primary data matrix (m x pX) where m = observations, pX = variables
 %   Y           - Design/response matrix (m x pY). Content is flexible and analysis-dependent:
-%                 * Continuous predictors for correlation/regression
+%                 * Continuous predictors for correlation or PLS-SVD
 %                 * Categorical codes for group comparisons [0 1]
 %                 * Condition/contrast codes for repeated measures [1 0]
 %                 * Multivariate data matrix for PLS-SVD
@@ -26,9 +24,9 @@ function results = di_analyze(di_cfg, Y, X)
 %                 .clusterMetrics: cluster-based inference results (if applicable)
 %
 % PREREQUISITES:
-%   - di_cfg must be validated with di_validateAnalysis first
+%   - di_cfg.dimensions and di_cfg.analysis must be validated
 %   - di_cfg.analysis.dataStruct must contain: observationID, 
-%     and optional indFactor# and repFactor# columns
+%     indFactor# and repFactor# columns
 %
 % ANALYSIS TYPES SUPPORTED:
 %   - Correlation (no factors)
@@ -40,26 +38,25 @@ function results = di_analyze(di_cfg, Y, X)
 
 %% sanity checks
 
-% make sure the analysis is validated prior to this function
-if ~isfield(di_cfg,'validation')
-    analysisUnvalidated = true;
-else
-    analysisUnvalidated = false;
-    if ~isfield(di_cfg.validation,'analysis')
-        analysisUnvalidated = true;
-    else
-        if ~di_cfg.validation.analysis
-            analysisUnvalidated = true;
-        end
+% sanity check: dimensions and analysis validated
+dimensionValidation = false; % initialize it false
+analysisValidation  = false; % initialize it false
+if isfield(di_cfg,'validation')
+    if isfield(di_cfg.validation,'dimensions')
+        dimensionValidation = true;
+    end
+    if isfield(di_cfg.validation,'analysis')
+        analysisValidation = true;
     end
 end
-if analysisUnvalidated
+if dimensionValidation==false
+    error('di_cfg.dimensions not validated. use: di_cfg = di_validateDimensions(di_cfg)')
+end
+if analysisValidation==false
     error('di_cfg.analysis not validated. use: di_cfg = di_validateAnalysis(di_cfg)')
 end
 
-
-
-% Y and X are matrices
+% sanity check: Y and X are matrices
 if ~ismatrix(Y)
     error('Y must be a matrix')
 end
@@ -78,6 +75,7 @@ if size(X,1)~=size(di_cfg.analysis.dataStruct,1)
 end
 
 % ignore_col if provided must be a row vector of same length as columns of X
+% TO DO: add default to ignore nothing (vector of all 0s)
 if isfield(di_cfg.analysis, 'ignore_col')
     if ~isrow(di_cfg.analysis.ignore_col)
         error('di_cfg.analysis.ignore_col must be a row vector')
@@ -89,6 +87,7 @@ if isfield(di_cfg.analysis, 'ignore_col')
 end
 
 % ignore_row if provided must be a column vector of same length as rows of X
+% TO DO: add default to ignore nothing (vector of all 0s)
 if isfield(di_cfg.analysis, 'ignore_row')
     if ~iscolumn(di_cfg.analysis.ignore_row)
         error('di_cfg.analysis.ignore_row must be a column vector')
@@ -106,6 +105,11 @@ if ismember(di_cfg.analysis.type, ["empiricalFeature_inferenceFeature" "parametr
     end
 end
 
+%% keep a copy of the matrices Y and X
+
+X_input = X;
+Y_input = Y;
+
 %% apply ignore_row, if provided
 
 if isfield(di_cfg.analysis,'ignore_row')
@@ -117,10 +121,11 @@ if isfield(di_cfg.analysis,'ignore_row')
 
 end
 
-%% keep a copy of the matrices Y and X
+%% keep a copy of the matrices Y and X, after removal of of ignore_row
 
-X_orig   = X;
-Y_orig   = Y;
+X_input_pruned   = X;
+Y_input_pruned   = Y;
+
 
 %% shortcuts
 
@@ -148,6 +153,7 @@ if numel(sphIdx) > 1
 end
 
 % cluster analyses do not support categorical dimensions
+% because clusters are based on adjacency
 if strcmp(di_cfg.analysis.type, "parametricFeature_inferenceCluster") && ~isempty(catIdx)
     error('categorical dimensions are not supported for cluster-based analyses');
 end
@@ -165,7 +171,8 @@ di_cfg.analysis.designCode = designCode;
 % get resampling indices
 [rowIdx, di_cfg] = di_reorderRowsGenerate(di_cfg);
 
-%% delegate to appropriate analysis function based on type and design code
+%% delegate to appropriate analysis function 
+% based on type and design code
 
 % build key using analysis type and 2-digit design code
 key = sprintf('%s & %d  %d', di_cfg.analysis.type, di_cfg.analysis.designCode(1), di_cfg.analysis.designCode(2));
@@ -177,7 +184,7 @@ switch key
         % - empirical (via simulations) at feature level
         % - FDR correction
         % - cluster forming (descriptive)
-        results = di_analysis_empiricalFeature_inferenceFeature_correlation(di_cfg, Y_orig, X_orig, rowIdx);
+        results = di_analysis_empiricalFeature_inferenceFeature_correlation(di_cfg, Y_input_pruned, X_input_pruned, rowIdx);
         
     case 'empiricalFeature_inferenceFeature & 0  1'
         
@@ -185,7 +192,7 @@ switch key
         % - empirical (via simulations) at feature level
         % - FDR correction
         % - cluster forming (descriptive)
-        results = di_analysis_empiricalFeature_inferenceFeature_ttestInd(di_cfg, Y_orig, X_orig, rowIdx);
+        results = di_analysis_empiricalFeature_inferenceFeature_ttestInd(di_cfg, Y_input_pruned, X_input_pruned, rowIdx);
 
     case 'empiricalFeature_inferenceFeature & 1  0'
 
@@ -193,7 +200,7 @@ switch key
         % - empirical (via simulations) at feature level
         % - FDR correction
         % - cluster forming (descriptive)
-        results = di_analysis_empiricalFeature_inferenceFeature_ttestPaired(di_cfg, Y_orig, X_orig, rowIdx);
+        results = di_analysis_empiricalFeature_inferenceFeature_ttestPaired(di_cfg, Y_input_pruned, X_input_pruned, rowIdx);
 
     case 'parametricFeature_inferenceFeature & 0  0'
         
@@ -202,7 +209,7 @@ switch key
         % correlation
         % - theoretical at feature level (parametric p-values)
         % - FDR correction
-        results = di_analysis_parametricFeature_inferenceFeature_correlation(di_cfg, Y_orig, X_orig, rowIdx);
+        results = di_analysis_parametricFeature_inferenceFeature_correlation(di_cfg, Y_input_pruned, X_input_pruned, rowIdx);
 
     case 'parametricFeature_inferenceFeature & 0  1'
 
@@ -211,7 +218,7 @@ switch key
         % independent sample/groups t-test
         % - theoretical at feature level (t-distribution p-values)
         % - FDR correction
-        results = di_analysis_parametricFeature_inferenceFeature_ttestInd(di_cfg, Y_orig, X_orig, rowIdx);
+        results = di_analysis_parametricFeature_inferenceFeature_ttestInd(di_cfg, Y_input_pruned, X_input_pruned, rowIdx);
 
     case 'parametricFeature_inferenceFeature & 1  0'
 
@@ -220,33 +227,33 @@ switch key
         % paired sample t-test
         % - theoretical at feature level (t-distribution p-values)
         % - FDR correction
-        results = di_analysis_parametricFeature_inferenceFeature_ttestPaired(di_cfg, Y_orig, X_orig, rowIdx);
+        results = di_analysis_parametricFeature_inferenceFeature_ttestPaired(di_cfg, Y_input_pruned, X_input_pruned, rowIdx);
 
     case 'parametricFeature_inferenceCluster & 0  0'
         
         % correlation
         % - theoretical at feature level
         % - cluster forming (for inference)
-        results = di_analysis_parametricFeature_inferenceCluster_correlation(di_cfg, Y_orig, X_orig, rowIdx);
+        results = di_analysis_parametricFeature_inferenceCluster_correlation(di_cfg, Y_input_pruned, X_input_pruned, rowIdx);
 
 
     case 'parametricFeature_inferenceCluster & 0  1'
         % independent sample/groups t-test
         % - theoretical at feature level
         % - cluster forming (for inference)
-        results = di_analysis_parametricFeature_inferenceCluster_ttestInd(di_cfg, Y_orig, X_orig, rowIdx);
+        results = di_analysis_parametricFeature_inferenceCluster_ttestInd(di_cfg, Y_input_pruned, X_input_pruned, rowIdx);
 
     case 'parametricFeature_inferenceCluster & 1  0'
 
         % paired sample t-test
         % - theoretical at feature level
         % - cluster forming (for inference)
-        results = di_analysis_parametricFeature_inferenceCluster_ttestPaired(di_cfg, Y_orig, X_orig, rowIdx);
+        results = di_analysis_parametricFeature_inferenceCluster_ttestPaired(di_cfg, Y_input_pruned, X_input_pruned, rowIdx);
         
     case {'PLS_SVD & 0  0', 'PLS_SVD & 1  0', 'PLS_SVD & 0  1', 'PLS_SVD & 1  1'}
 
         % PLS-SVD multivariate analysis (all design codes)
-        results = di_analysis_plsSVD(di_cfg, Y_orig, X_orig, rowIdx);
+        results = di_analysis_plsSVD(di_cfg, Y_input_pruned, X_input_pruned, rowIdx);
 
     otherwise
         % any other analysis type/design code combination
@@ -268,6 +275,10 @@ results = di_inference(di_cfg,results);
 % this bit is only doing something if clusters are meaningful
 
 results = di_clusterDescribe(di_cfg,results);
+
+% keep full input matrices for downstream viewers after all processing
+results.inputData.X = X_input;
+results.inputData.Y = Y_input;
 
 
 end
