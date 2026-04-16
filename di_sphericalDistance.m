@@ -74,7 +74,7 @@ if di_cfg.analysis.figFlag
         if nChan >= 8
             nRandChans = 8;
         else
-            nRandChans = ceil(nChans/4);
+            nRandChans = ceil(nChan/4);
         end
         topoPlotFig_chanIdx = sort(randperm(nChan, nRandChans));
 
