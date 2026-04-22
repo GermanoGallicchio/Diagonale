@@ -19,7 +19,7 @@ Not yet available.
 
 ## Documentation
 
-Documentation for Diagonale is available at this [link](https://germanogallicchio.github.io/PhysioExplorer_documentation/index.html)
+Documentation for Diagonale is available at this [link](https://germanogallicchio.github.io/Diagonale_documentation/index.html)
 
 
 
@@ -42,7 +42,9 @@ Not yet available.
 
 
 
-## How to cite
+## How to cite / Referencing
+
+If you used Diagonale, please cite this software and mention the specific version you have used:
 
 Gallicchio, G. (2025). Diagonale (formerly PhysioExplorer). Zenodo. (https://doi.org/10.5281/zenodo.16808782)[https://doi.org/10.5281/zenodo.16808782]
 
@@ -79,12 +81,6 @@ If hypothesis testing is not the goal, but rather stability of the statistical m
 ---
 
 
-## Referencing: <br>
-If you use Diagonale, please cite the Zenodo DOI
-
-Example:
-
-Gallicchio, G. (2025). Diagonale (formerly PhysioExplorer). Zenodo. [https://doi.org/10.5281/zenodo.16808782](https://doi.org/10.5281/zenodo.16808782)
 
 ---
 
