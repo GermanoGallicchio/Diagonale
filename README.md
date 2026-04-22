@@ -1,4 +1,4 @@
-# _PhysioExplorer_ for MATLAB
+# _PhysioExplorer_ for MATLAB (soon to be rebranded and changed substantially to include new features)
 
 Author: Germano Gallicchio, [Bangor University](https://www.bangor.ac.uk/)
 
