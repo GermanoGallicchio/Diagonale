@@ -61,8 +61,7 @@ pVal_wilk_maxT = results.inference.mode.pVal_maxT.wilk;
 
 %% 
 
-% initialization
-report = struct();
+report = struct(); % initialization
 
 for modeIdx = 1:nModes
     report(modeIdx).modeId = modeIdx;
