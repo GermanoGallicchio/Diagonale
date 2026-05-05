@@ -130,24 +130,26 @@ elseif isfield(di_cfg.analysis,'plssvdParams')
     warning('di_cfg.analysis.plssvdParams provided but type/objective do not use PLS SVD. I will ignore di_cfg.analysis.plssvdParams')
 end
 
-
+% --- --- // this section can be deleted
 % --- H0 ambiguity specific (i.e., design [1 1] currently enabled only for PLS-SVD) ---
-% TO DO: move this section to a new di_validateHypothesis that is activated
-% only for the permutation testing branch
-% this design does not have only one possible null hypothesis, so this
-% field solves the ambiguity. it is ignored if the design is not [1 1].
-% except the design [1 1] is only formalized downstream, so i might change
-% the if statements or move this little section downstream where it is
-% needed
-if strcmp(di_cfg.analysis.objective,'permutationH0testing')
-    if isfield(di_cfg.analysis, 'H0hypothesis')
-        allowedH0 = {'between', 'within', 'within-by-group', 'between-by-condition'};
-        if ~any(strcmp(di_cfg.analysis.H0hypothesis, allowedH0))
-            error(['Invalid di_cfg.analysis.H0hypothesis: ' char(di_cfg.analysis.H0hypothesis) '. ' ...
-                'Allowed values: ''between'', ''within'', ''within-by-group'', ''between-by-condition''.'])
-        end
-    end
-end
+% % TO DO: move this section to a new di_validateHypothesis that is activated
+% % only for the permutation testing branch
+% % this design does not have only one possible null hypothesis, so this
+% % field solves the ambiguity. it is ignored if the design is not [1 1].
+% % except the design [1 1] is only formalized downstream, so i might change
+% % the if statements or move this little section downstream where it is
+% % needed
+% if strcmp(di_cfg.analysis.objective,'permutationH0testing')
+%     if isfield(di_cfg.analysis, 'H0hypothesis')
+%         allowedH0 = {'between', 'within', 'within-by-group', 'between-by-condition'};
+%         if ~any(strcmp(di_cfg.analysis.H0hypothesis, allowedH0))
+%             error(['Invalid di_cfg.analysis.H0hypothesis: ' char(di_cfg.analysis.H0hypothesis) '. ' ...
+%                 'Allowed values: ''between'', ''within'', ''within-by-group'', ''between-by-condition''.'])
+%         end
+%     end
+% end
+% moved to di_validateH0 
+% --- --- // this section can be deleted
 
 %% dataStruct
 % analysis.dataStruct table explains how the data are structured, what each row represents)
@@ -249,10 +251,9 @@ if ~isfield(di_cfg.analysis,'figFlag')
     warning(['di_cfg.analysis.figFlag not provided. I am using logical ' num2str(di_cfg.analysis.figFlag) ' by default'])
 end
 
-
+%% validation done
 % add a validated flag
 di_cfg.validation.analysis = true;
 
-%%
 disp('Diagonale: analysis validated')
 end
