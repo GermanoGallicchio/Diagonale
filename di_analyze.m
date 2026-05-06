@@ -166,6 +166,13 @@ designCode = di_parseDesign(di_cfg,Y);
 % keep a copy of the designCode in the analysis
 di_cfg.analysis.designCode = designCode;
 
+%% validate null hypothesis
+% if a null hypothesis is tested
+
+if strcmp(di_cfg.analysis.objective, 'permutationH0testing') 
+    di_cfg = di_validateH0(di_cfg);
+end
+
 %% perform the analysis
 
 % get resampling indices
@@ -176,80 +183,28 @@ di_cfg.analysis.designCode = designCode;
 
 % build key using analysis type and 2-digit design code
 key = sprintf('%s & %d  %d', di_cfg.analysis.type, di_cfg.analysis.designCode(1), di_cfg.analysis.designCode(2));
-
 switch key
-    case 'empiricalFeature_inferenceFeature & 0  0'
+    case {'empiricalFeature_inferenceFeature & 0  0', ...
+          'empiricalFeature_inferenceFeature & 0  1', ...
+          'empiricalFeature_inferenceFeature & 1  0', ...
+          'parametricFeature_inferenceFeature & 0  0', ...
+          'parametricFeature_inferenceFeature & 0  1', ...
+          'parametricFeature_inferenceFeature & 1  0', ...
+          'parametricFeature_inferenceCluster & 0  0', ...
+          'parametricFeature_inferenceCluster & 0  1', ...
+          'parametricFeature_inferenceCluster & 1  0'}
 
-        % correlation
-        % - empirical (via simulations) at feature level
-        % - FDR correction
-        % - cluster forming (descriptive)
-        results = di_analysis_empiricalFeature_inferenceFeature_correlation(di_cfg, Y_input_pruned, X_input_pruned, rowIdx);
-        
-    case 'empiricalFeature_inferenceFeature & 0  1'
-        
-        % independent sample/groups t-test
-        % - empirical (via simulations) at feature level
-        % - FDR correction
-        % - cluster forming (descriptive)
-        results = di_analysis_empiricalFeature_inferenceFeature_ttestInd(di_cfg, Y_input_pruned, X_input_pruned, rowIdx);
-
-    case 'empiricalFeature_inferenceFeature & 1  0'
-
-        % paired sample t-test
-        % - empirical (via simulations) at feature level
-        % - FDR correction
-        % - cluster forming (descriptive)
-        results = di_analysis_empiricalFeature_inferenceFeature_ttestPaired(di_cfg, Y_input_pruned, X_input_pruned, rowIdx);
-
-    case 'parametricFeature_inferenceFeature & 0  0'
-        
-        keyboard; % UNTIL HERE OK
-
-        % correlation
-        % - theoretical at feature level (parametric p-values)
-        % - FDR correction
-        results = di_analysis_parametricFeature_inferenceFeature_correlation(di_cfg, Y_input_pruned, X_input_pruned, rowIdx);
-
-    case 'parametricFeature_inferenceFeature & 0  1'
-
-        keyboard; % UNTIL HERE OK
-
-        % independent sample/groups t-test
-        % - theoretical at feature level (t-distribution p-values)
-        % - FDR correction
-        results = di_analysis_parametricFeature_inferenceFeature_ttestInd(di_cfg, Y_input_pruned, X_input_pruned, rowIdx);
-
-    case 'parametricFeature_inferenceFeature & 1  0'
-
-        keyboard; % UNTIL HERE OK
-
-        % paired sample t-test
-        % - theoretical at feature level (t-distribution p-values)
-        % - FDR correction
-        results = di_analysis_parametricFeature_inferenceFeature_ttestPaired(di_cfg, Y_input_pruned, X_input_pruned, rowIdx);
-
-    case 'parametricFeature_inferenceCluster & 0  0'
-        
-        % correlation
-        % - theoretical at feature level
-        % - cluster forming (for inference)
-        results = di_analysis_parametricFeature_inferenceCluster_correlation(di_cfg, Y_input_pruned, X_input_pruned, rowIdx);
+        % unified OLS engine for all univariate designs and analysis types:
+        %   design [0 0] : correlation (Pearson or Spearman via di_cfg.analysis.OLS.corrType)
+        %   design [0 1] : independent-groups t-test (Welch or Student via di_cfg.analysis.OLS.varianceType)
+        %   design [1 0] : paired t-test (subject fixed effects)
+        %
+        %   empiricalFeature_inferenceFeature  : beta statVal, empirical p-values via permutation
+        %   parametricFeature_inferenceFeature : beta statVal, OLS/Welch SE -> parametric p-values
+        %   parametricFeature_inferenceCluster : beta statVal, parametric p-values -> cluster forming
+        results = di_analysis_OLS(di_cfg, Y_input_pruned, X_input_pruned, rowIdx);
 
 
-    case 'parametricFeature_inferenceCluster & 0  1'
-        % independent sample/groups t-test
-        % - theoretical at feature level
-        % - cluster forming (for inference)
-        results = di_analysis_parametricFeature_inferenceCluster_ttestInd(di_cfg, Y_input_pruned, X_input_pruned, rowIdx);
-
-    case 'parametricFeature_inferenceCluster & 1  0'
-
-        % paired sample t-test
-        % - theoretical at feature level
-        % - cluster forming (for inference)
-        results = di_analysis_parametricFeature_inferenceCluster_ttestPaired(di_cfg, Y_input_pruned, X_input_pruned, rowIdx);
-        
     case {'PLS_SVD & 0  0', 'PLS_SVD & 1  0', 'PLS_SVD & 0  1', 'PLS_SVD & 1  1'}
 
         % PLS-SVD multivariate analysis (all design codes)
@@ -259,7 +214,6 @@ switch key
         % any other analysis type/design code combination
         error(['not yet coded: ' di_cfg.analysis.type ' & ' num2str(di_cfg.analysis.designCode)])
 
-        keyboard; % UNTIL HERE OK
 end
 
 % keep a copy of the analysis in the results
