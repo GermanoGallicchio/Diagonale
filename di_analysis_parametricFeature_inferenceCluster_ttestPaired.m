@@ -36,6 +36,9 @@ function results = di_analysis_parametricFeature_inferenceCluster_ttestPaired(di
 %
 % Author: Germano Gallicchio (germano.gallicchio@gmail.com)
 
+% PHASING OUT
+error('This function is being phased out. Already replaced by di_analysis_OLS and soon deleted entirely. currently here just for cross checking')
+
 %% shortcuts
 
 % number of iterations
