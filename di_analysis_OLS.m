@@ -118,6 +118,8 @@ function results = di_analysis_OLS(di_cfg, X_orig, Y_orig, rowIdx)
 %
 % Author: Germano Gallicchio (germano.gallicchio@gmail.com)
 
+
+% TO DO: the parametric computations can be done in a separate function (at the bottom) and be reused internally
 %% default options 
 
 % ranked
@@ -216,6 +218,9 @@ end
 % downstream we will augment X to become [intercept, predictor, subject_dummies]. 
 % currently X contains only the predictor
 predictor_colIdx = 2; % predictor column index
+% TO DO (maybe): make the colIdx a parameter, because in the future there could
+% be predictors in more than the 2nd column (if I allow OLS to compare more
+% than 2 things)
 
 % intercept is very simple (col of 1s) so it will be added later
 
@@ -297,34 +302,47 @@ for itIdx = 1:nIterations
     % --- parametric p-values (only for parametric analysis types) ---
     if needPVal
         keyboard % double check this
+        % TO DO: convert the code below to a function at the bottom that can be reused in the two parts // easier for maintenance and tidier
         if isequal(designCode, [0 1]) && strcmp(varianceType, 'unequal')
-            % Welch t-test: per-group variance, Satterthwaite degrees of freedom
-            % group membership follows permuted X so SE correctly reflects shuffled data
+            % MODE: Independent groups, unequal variances (Welch).
+            % Uses group-specific variance and feature-wise Satterthwaite df.
+            % Group masks are computed from the current X (permuted in H0 runs).
             condVals = unique(X);
             mask1 = (X == max(condVals));
             mask0 = (X == min(condVals));
             n1    = sum(mask1);
             n0    = sum(mask0);
+            % Step 1: build variance ingredients per feature (group-wise variances).
             s1sq  = var(Y_fit(mask1, :));        % [1 x pY]
             s0sq  = var(Y_fit(mask0, :));        % [1 x pY]
+            % Step 2: compute coefficient SE from those variance ingredients.
             SE_W  = sqrt(s1sq / n1 + s0sq / n0); % [1 x pY]
+            % Step 3: compute t-statistic for each feature.
             tStat = statVal ./ SE_W;
-            % Satterthwaite df per feature
+            % Step 4: compute degrees of freedom (Satterthwaite, feature-wise).
             num_df  = (s1sq / n1 + s0sq / n0) .^ 2;
             den_df  = (s1sq / n1) .^ 2 / (n1 - 1) + (s0sq / n0) .^ 2 / (n0 - 1);
             df_satt = num_df ./ den_df;           % [1 x pY]
+            % Step 5: compute two-tailed p-values from t and df.
             pVal    = 2 * tcdf(-abs(tStat), df_satt);
             df_iter = df_satt;
 
         else
-            % OLS residual SE: works for equal-variance groups, paired, and correlation
+            % MODE: Classical OLS residual-variance t-test.
+            % Used for equal-variance groups, paired design, and correlation design.
+            % Degrees of freedom are model residual df from the design matrix rank.
+            % Step 1: build variance ingredients per feature (RSS from residuals).
             E       = Y_fit - X_fit_augmented * beta;                          % [m x pY] residuals
             RSS     = sum(E .^ 2, 1);                            % [1 x pY]
+            % Step 2: compute coefficient SE from those variance ingredients.
             df_resid = m - rank(X_fit_augmented);                              % scalar, robust to collinearity
             sigma2  = RSS / df_resid;                            % [1 x pY]
             DtD_inv = inv(X_fit_augmented' * X_fit_augmented);                               % [nPred x nPred]
             SE      = sqrt(sigma2 * DtD_inv(predictor_colIdx, predictor_colIdx)); % [1 x pY]
+            % Step 3: compute t-statistic for each feature.
             tStat   = statVal ./ SE;                             % [1 x pY]
+            % Step 4: compute degrees of freedom (residual df, shared across features).
+            % Step 5: compute two-tailed p-values from t and df.
             pVal    = 2 * tcdf(-abs(tStat), df_resid);           % [1 x pY]
             df_iter = repmat(df_resid, 1, pY);
         end
@@ -355,29 +373,39 @@ for itIdx = 1:nIterations
         else
             % empirical branch: one-time SE computation for descriptive tVal
             if isequal(designCode, [0 1]) && strcmp(varianceType, 'unequal')
-                % Welch SE using original (unshuffled) group membership at itIdx==1
+                % MODE: Observed-data Welch branch (unequal variances).
+                % Uses original (unshuffled) group membership at itIdx==1.
                 condVals_obs = unique(X);
                 mask1_obs    = (X == max(condVals_obs));
                 mask0_obs    = (X == min(condVals_obs));
                 n1_obs       = sum(mask1_obs);
                 n0_obs       = sum(mask0_obs);
+                % Step 1: build variance ingredients per feature (group-wise variances).
                 s1sq_obs     = var(Y_fit(mask1_obs, :));                    % [1 x pY]
                 s0sq_obs     = var(Y_fit(mask0_obs, :));                    % [1 x pY]
+                % Step 2: compute coefficient SE from those variance ingredients.
                 SE_obs       = sqrt(s1sq_obs / n1_obs + s0sq_obs / n0_obs); % [1 x pY]
+                % Step 4: compute degrees of freedom (Satterthwaite, feature-wise).
                 num_df_obs   = (s1sq_obs / n1_obs + s0sq_obs / n0_obs) .^ 2;
                 den_df_obs   = (s1sq_obs / n1_obs) .^ 2 / (n1_obs - 1) + (s0sq_obs / n0_obs) .^ 2 / (n0_obs - 1);
                 df_parametric_obs = num_df_obs ./ den_df_obs;
             else
-                % OLS residual SE: applies to equal-variance groups, paired, and correlation
+                % MODE: Observed-data classical OLS residual-variance branch.
+                % Applies to equal-variance groups, paired design, and correlation design.
+                % Step 1: build variance ingredients per feature (RSS from residuals).
                 E_obs        = Y_fit - X_fit_augmented * beta;                              % [m x pY]
                 RSS_obs      = sum(E_obs .^ 2, 1);                            % [1 x pY]
+                % Step 2: compute coefficient SE from those variance ingredients.
                 df_resid_obs = m - rank(X_fit_augmented);                                   % scalar, robust to collinearity
                 sigma2_obs   = RSS_obs / df_resid_obs;                        % [1 x pY]
                 DtD_inv_obs  = inv(X_fit_augmented' * X_fit_augmented);                                   % [nPred x nPred]
                 SE_obs       = sqrt(sigma2_obs * DtD_inv_obs(predictor_colIdx, predictor_colIdx)); % [1 x pY]
+                % Step 4: compute degrees of freedom (residual df, shared across features).
                 df_parametric_obs = repmat(df_resid_obs, 1, pY);
             end
+            % Step 3: compute t-statistic for each feature.
             tStat_obs = statVal ./ SE_obs;  % [1 x pY]
+            % Step 5: compute two-tailed p-values from t and df.
             pVal_parametric_obs = 2 * tcdf(-abs(tStat_obs), df_parametric_obs);
         end
 
