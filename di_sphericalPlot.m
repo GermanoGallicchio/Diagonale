@@ -12,7 +12,6 @@ function di_sphericalPlot(di_cfg, sphValues, params)
 %     chanMarkerChar, chanLbl, colBar, colMap, cLim
 
 
-
 % Extract dimension metadata
 dimKeys = fieldnames(di_cfg.dimensions);
 dimTypes = cellfun(@(k) di_cfg.dimensions.(k).type, dimKeys, 'UniformOutput', false);
@@ -20,10 +19,10 @@ dimTypes = cellfun(@(k) di_cfg.dimensions.(k).type, dimKeys, 'UniformOutput', fa
 % Find spherical dimension
 sphIdx = find(strcmp(dimTypes, 'spherical'));
 if isempty(sphIdx)
-    error('di_z3Plot requires at least one spherical dimension in di_cfg.dimensions');
+    error('\\ di_sphericalDistance requires a spherical dimension in di_cfg.dimensions');
 end
 if length(sphIdx) > 1
-    warning('Multiple spherical dimensions found. Using the first one: %s', dimKeys{sphIdx(1)});
+    warning('\\ Multiple spherical dimensions found. Using the first one: %s', dimKeys{sphIdx(1)});
 end
 
 % Extract spherical coordinates and labels
@@ -33,13 +32,13 @@ nChan = di_cfg.dimensions.(sphKey).num;
 
 % Build coord_sph struct for projection
 coord_sph = repmat(struct('sph_theta', [], 'sph_phi', [], 'labels', ''), nChan, 1);
-for i = 1:nChan
-    coord_sph(i).sph_theta = sphCoord.sphTheta(i);
-    coord_sph(i).sph_phi = sphCoord.sphPhi(i);
+for chanIdx = 1:nChan
+    coord_sph(chanIdx).sph_theta = sphCoord.sphTheta(chanIdx);
+    coord_sph(chanIdx).sph_phi   = sphCoord.sphPhi(chanIdx);
     if isfield(sphCoord, 'labels')
-        coord_sph(i).labels = sphCoord.labels{i};
+        coord_sph(chanIdx).labels = sphCoord.labels{chanIdx};
     else
-        coord_sph(i).labels = sprintf('Chan%d', i);
+        coord_sph(chanIdx).labels = sprintf('Chan%d', chanIdx);
     end
 end
 fieldNames = fieldnames(params);
