@@ -49,8 +49,9 @@ sphIdx = find(strcmp(dimTypes, 'spherical'));
 catIdx = find(strcmp(dimTypes, 'categorical'));
 
 % sanity check categorical dimensions (not supported in adjacency)
-% TO DO (maybe.. or not) in future allow adjacency for the other dimensions (to work
-% for each level of the categorical dimension(s))
+% TO DO in future i might allow adjacency for all non-categorical 
+% dimensions (to work for each level of the categorical dimension(s)).
+% probably not: just split analysis by categorical levels...
 if ~isempty(catIdx)
     error('Adjacency cannot be computed for categorical dimensions');
 end
@@ -144,6 +145,8 @@ switch sparseApproach
             end
 
             % nnz(criterion1 & criterion2); % just for curiosity
+
+            % fill in the logical matrix
             adjMatrix_logical(pIdx,:) = reshape(criterion1 & criterion2,[1, pX]);
             
             if pIdx==1
@@ -156,10 +159,7 @@ switch sparseApproach
         clear adjMatrix_logical % to save memory
 
     case 'fromIdx'
-
-% TO DO: double check this still works after the diagonale change with
-% multiple dimensions
-
+keyboard
         a_idx = [];
         b_idx = [];
 
