@@ -30,7 +30,7 @@ dimKeys  = fieldnames(di_cfg.dimensions);
 dimTypes = cellfun(@(k) di_cfg.dimensions.(k).type, dimKeys, 'UniformOutput', false);
 dimSizes = cellfun(@(k) length(di_cfg.dimensions.(k).vec), dimKeys);
 
-%%
+%% validation checks
 
 % sanity check: di_cfg.analysis exists
 if ~isfield(di_cfg,'analysis')
@@ -60,6 +60,40 @@ if ~any(strcmp(di_cfg.analysis.objective,analysisObjectives))
     disp(analysisObjectives)
     error('di_cfg.analysis.objective must be of any of the allowed objectives');
 end
+
+% subject-centering mode
+% accepted values:
+%   'center'   -> remove subject means before model decomposition/fit
+%   'noCenter' -> do not remove subject means
+% TO DO: check if ignore rows interferes with subject centering
+if isfield(di_cfg.analysis, 'subjectCentering')
+    subjectCenteringTypes = {'center', 'noCenter'};
+    if ~any(strcmp(di_cfg.analysis.subjectCentering, subjectCenteringTypes))
+        disp("\\ allowed subjectCentering values: ")
+        disp(subjectCenteringTypes)
+        error('\\ di_cfg.analysis.subjectCentering must be one of the allowed values mentioned above');
+    end
+else
+    di_cfg.analysis.subjectCentering = 'noCenter';
+    warning('\\ di_cfg.analysis.subjectCentering not provided by the user. Using default: ''noCenter'' (no subject centering). Set to ''center'' to remove subject means before model decomposition/fit')
+end
+
+% pre-check for permuteUnit validity (just its existance with one of supported options)
+% design-dependent validations are done later in di_validateH0 (after designCode is known).
+if strcmp(di_cfg.analysis.objective,'permutationH0testing')
+    permuteUnitTypes = {'wholeObservation', 'withinObservation'};
+    if ~isfield(di_cfg.analysis,'permuteUnit')
+        error('\\ permutation testing requires to speficy a type of permutation')
+    else
+        if ~any(strcmp(di_cfg.analysis.permuteUnit, permuteUnitTypes))
+            disp('allowed permuteUnit values:')
+            disp(permuteUnitTypes)
+            error('\\ di_cfg.analysis.permuteUnit must be one of the allowed values, mentioned above');
+        end
+    end
+end
+
+
 
 % --- cluster specific ---
 % cluster-based analysis: validate required cluster parameters
@@ -123,33 +157,12 @@ if strcmp(di_cfg.analysis.type,'PLS_SVD')
     % For continuous associations (PLSCorrelation), manually set to [true, true] to z-score both X and Y
     if ~isfield(di_cfg.analysis.plssvdParams,'zscoringVec')
         di_cfg.analysis.plssvdParams.zscoringVec = [false, true];
-        warning('analysis.plssvdParams.zscoringVec not provided. Using default: [false, true] (X zscored, Y not zscored). For continuous associations, set to [true, true].')
+        warning('\\ analysis.plssvdParams.zscoringVec not provided. Using default: [false, true] (X zscored, Y not zscored). For continuous associations, set to [true, true].')
     end
 elseif isfield(di_cfg.analysis,'plssvdParams')
     % provided but not applicable for the chosen type/objective
-    warning('di_cfg.analysis.plssvdParams provided but type/objective do not use PLS SVD. I will ignore di_cfg.analysis.plssvdParams')
+    warning('\\ di_cfg.analysis.plssvdParams provided but type/objective do not use PLS SVD. I will ignore di_cfg.analysis.plssvdParams')
 end
-
-% --- --- // this section can be deleted
-% --- H0 ambiguity specific (i.e., design [1 1] currently enabled only for PLS-SVD) ---
-% % TO DO: move this section to a new di_validateHypothesis that is activated
-% % only for the permutation testing branch
-% % this design does not have only one possible null hypothesis, so this
-% % field solves the ambiguity. it is ignored if the design is not [1 1].
-% % except the design [1 1] is only formalized downstream, so i might change
-% % the if statements or move this little section downstream where it is
-% % needed
-% if strcmp(di_cfg.analysis.objective,'permutationH0testing')
-%     if isfield(di_cfg.analysis, 'H0hypothesis')
-%         allowedH0 = {'between', 'within', 'within-by-group', 'between-by-condition'};
-%         if ~any(strcmp(di_cfg.analysis.H0hypothesis, allowedH0))
-%             error(['Invalid di_cfg.analysis.H0hypothesis: ' char(di_cfg.analysis.H0hypothesis) '. ' ...
-%                 'Allowed values: ''between'', ''within'', ''within-by-group'', ''between-by-condition''.'])
-%         end
-%     end
-% end
-% moved to di_validateH0 
-% --- --- // this section can be deleted
 
 %% dataStruct
 % analysis.dataStruct table explains how the data are structured, what each row represents)
@@ -192,16 +205,16 @@ end
 
 if ~isfield(di_cfg.analysis,'randomSeed')
     di_cfg.analysis.randomSeed = 42;
-    warning(['di_cfg.analysis.randomSeed not provided. I am using ' num2str(di_cfg.analysis.randomSeed) ' by default'])
+    warning(['\\ di_cfg.analysis.randomSeed not provided. I am using ' num2str(di_cfg.analysis.randomSeed) ' by default'])
 end
 
 % random seed validation (primary validation point)
 if ~isscalar(di_cfg.analysis.randomSeed) || ~isnumeric(di_cfg.analysis.randomSeed) || ...
         ~isfinite(di_cfg.analysis.randomSeed)
-    error('analysis.randomSeed must be a finite numeric scalar')
+    error('\\ analysis.randomSeed must be a finite numeric scalar')
 end
 if di_cfg.analysis.randomSeed ~= round(di_cfg.analysis.randomSeed)
-    error('analysis.randomSeed must be integer-valued (e.g., 42)')
+    error('\\ analysis.randomSeed must be integer-valued (e.g., 42)')
 end
 
 
@@ -209,7 +222,7 @@ end
 if strcmp(di_cfg.analysis.objective,'permutationH0testing')
     if ~isfield(di_cfg.analysis,'p_crit')
         di_cfg.analysis.p_crit = 0.05;
-        warning(['di_cfg.analysis.p_crit not provided. I am using ' num2str(di_cfg.analysis.p_crit) ' by default'])
+        warning(['\\ di_cfg.analysis.p_crit not provided. I am using ' num2str(di_cfg.analysis.p_crit) ' by default'])
     end
 end
 
@@ -218,10 +231,10 @@ end
 nIterations_lowerEdge = 5000; % note: a bit arbitrary
 if ~isfield(di_cfg.analysis,'nIterations')
     di_cfg.analysis.nIterations = nIterations_lowerEdge;
-    warning(['di_cfg.analysis.nIterations not provided. I am using ' num2str(di_cfg.analysis.nIterations) ' by default'])
+    warning(['\\ di_cfg.analysis.nIterations not provided. I am using ' num2str(di_cfg.analysis.nIterations) ' by default'])
 else
     if di_cfg.analysis.nIterations < nIterations_lowerEdge
-        warning('analysis might be unstable if di_cfg.analysis.nIterations are fewer than %d', nIterations_lowerEdge)
+        warning('\\ analysis might be unstable if di_cfg.analysis.nIterations are fewer than %d', nIterations_lowerEdge)
     end
 end
 
