@@ -65,7 +65,7 @@ end
 % accepted values:
 %   'center'   -> remove subject means before model decomposition/fit
 %   'noCenter' -> do not remove subject means
-% TO DO: check if ignore rows interferes with subject centering
+% subject centering is applied after ignoring rows (di_cfg.analysis.ignore_row) 
 if isfield(di_cfg.analysis, 'subjectCentering')
     subjectCenteringTypes = {'center', 'noCenter'};
     if ~any(strcmp(di_cfg.analysis.subjectCentering, subjectCenteringTypes))
