@@ -1,8 +1,23 @@
 function sphericalDistanceMatrix = di_sphericalDistance(di_cfg)
-% Compute spherical distance matrix from di_cfg.dimensions
+% Compute distance matrix between all sensors in the spherical dimension of di_cfg.dimensions
 % Input: di_cfg - configuration struct with validated dimensions
 % Output: sphericalDistanceMatrix - angular distance in radians between all channel pairs
 
+%% check dimensions have been validated
+
+% make sure the dimensions are validated prior to this function
+dimensionValidation = false; % initialize it false
+if isfield(di_cfg,'validation')
+    if isfield(di_cfg.validation,'dimensions')
+        dimensionValidation = true;
+    end
+end
+
+if dimensionValidation==false
+    error('\\ di_cfg.dimensions not validated. use: di_cfg = di_validateDimensions(di_cfg)')
+end
+
+%% spherical dimension checks
 
 % Extract dimension metadata
 dimKeys = fieldnames(di_cfg.dimensions);
@@ -11,10 +26,10 @@ dimTypes = cellfun(@(k) di_cfg.dimensions.(k).type, dimKeys, 'UniformOutput', fa
 % Find spherical dimension
 sphIdx = find(strcmp(dimTypes, 'spherical'));
 if isempty(sphIdx)
-    error('di_z3distance requires at least one spherical dimension in di_cfg.dimensions');
+    error('\\ di_sphericalDistance requires a spherical dimension in di_cfg.dimensions');
 end
 if length(sphIdx) > 1
-    warning('Multiple spherical dimensions found. Using the first one: %s', dimKeys{sphIdx(1)});
+    warning('\\ Multiple spherical dimensions found. Using the first one: %s', dimKeys{sphIdx(1)});
 end
 
 % Extract spherical coordinates
@@ -23,6 +38,10 @@ sphCoord = di_cfg.dimensions.(sphKey).coord;
 sphCoord.labels = di_cfg.dimensions.(sphKey).vec;
 nChan = di_cfg.dimensions.(sphKey).num;
 
+%% computations
+
+% convert to radians
+% TO DO: in future, require radians (not degrees) as input
 theta = deg2rad(sphCoord.sphTheta(:)');
 phi   = deg2rad(sphCoord.sphPhi(:)');
 
@@ -39,6 +58,7 @@ for chanAIdx = 1:nChan
         sphericalDistanceMatrix(chanAIdx, chanBIdx) = angDist;
     end
 end
+
 
 %% figure
 if di_cfg.analysis.figFlag
