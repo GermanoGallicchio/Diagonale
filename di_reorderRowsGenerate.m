@@ -4,12 +4,12 @@ function [rowIdx, di_cfg] = di_reorderRowsGenerate(di_cfg)
 % - bootstrap for stability / precision estimation 
 %
 % TO DO (not yet available):
-% - cross-validation for generalizability estimation // do this in another
+% - cross-validation for generalizability estimation // better do this in another
 % function. for example, the fact that iteration 1 is identical to the
-% origianl won't work for cross validation
+% origianl won't work for cross validation. something like di_foldGenerate
 %
 % row indices are based on dataStruct, analysis objective, and (for
-% permutation) an explicit H0 hypothesis.
+% permutation) an explicit permutation unit choice.
 %
 % the rowIdx output is then verified, and its verification checks can be seen when di_cfg.analysis.verbose = true
 %
@@ -19,10 +19,9 @@ function [rowIdx, di_cfg] = di_reorderRowsGenerate(di_cfg)
 %     .analysis.nIterations - positive integer, number of resampling iterations
 %     .analysis.objective   - 'permutationH0testing' or 'bootstrapStability'
 %     .analysis.randomSeed  - (optional) integer for reproducibility
-%     .analysis.H0hypothesis - required when objective='permutationH0testing'
-%                              allowed values:
-%                              'between', 'within', 'within-by-group',
-%                              'between-by-condition'
+%     .analysis.permuteUnit - required when objective='permutationH0testing'
+%                             allowed values:
+%                             'wholeObservation', 'withinObservation'
 %
 % OUTPUT:
 %   rowIdx              - (nRows x nIterations) matrix of row indices
@@ -32,13 +31,16 @@ function [rowIdx, di_cfg] = di_reorderRowsGenerate(di_cfg)
 % Notes:
 % 1. The first iteration is identical to the original data (no permutation
 % or resampling)
-% 2. PERMUTATION is controlled by di_cfg.analysis.H0hypothesis
-%    'between'               : shuffle entire observations across positions
-%                              (preserve repeated measures, if there are any, within each observation)
-%    'within'                : shuffle repeated measures within each observation
-%                              (preserve observation identities)
-%    'within-by-group'       : same permutation mechanics as 'between'
-%    'between-by-condition'  : same permutation mechanics as 'within'
+% 2. PERMUTATION is controlled by di_cfg.analysis.permuteUnit
+%    Internally there are two permutation paths:
+%      PATH A (permute whole observations):
+%        'wholeObservation'
+%      PATH B (permute within observations):
+%        'withinObservation'
+%    This function only determines row reordering. 
+% 
+%    Subject centering is configured elsewhere (di_cfg.analysis.subjectCentering) 
+%    and applied downstream for non-OLS analysis (e.g., PLS-SVD).
 %
 % 3. BOOTSTRAP is always done by resamples with replacement full observation
 % units (eg, a subject with all its conditions)
@@ -49,19 +51,23 @@ function [rowIdx, di_cfg] = di_reorderRowsGenerate(di_cfg)
 
 % there is a random seed
 if ~isfield(di_cfg.analysis, 'randomSeed')
-    error('di_cfg.analysis.randomSeed is missing. Run di_validateAnalysis first.');
+    error('\\ di_cfg.analysis.randomSeed is missing. Run di_validateAnalysis first.');
 end
 
-% permutation requires explicit H0 hypothesis
-if ~isfield(di_cfg.validation,'H0hypothesis') || di_cfg.validation.H0hypothesis~=1
-    error('null hypothesis not validated. Likely a coding bug due to misplaced di_validateH0 in the pipeline');
+% permutation requires explicit permutation unit
+if ~isfield(di_cfg.validation,'permuteUnit') || di_cfg.validation.permuteUnit~=1
+    error('\\ Permutation unit not validated. Likely a coding bug due to misplaced di_validateH0 in the pipeline');
 end
 %% shortcuts
 
 dataStruct = di_cfg.analysis.dataStruct;
 nIterations = double(di_cfg.analysis.nIterations);
 nRow = height(dataStruct);
-H0hypothesis = di_cfg.analysis.H0hypothesis;
+permuteUnit = di_cfg.analysis.permuteUnit;
+
+% two permutation mechanics
+permute_WithinObservation_logic = strcmp(permuteUnit, 'withinObservation');
+permute_WholeObservation_logic  = strcmp(permuteUnit, 'wholeObservation');
 
 %% set random seed
 rng(double(di_cfg.analysis.randomSeed), 'twister');
@@ -142,38 +148,6 @@ rowIdxByObs = accumarray(obsIdxPerRow, (1:nRow)', [], @(x){x});
 % rowIdxByObs{idx} contains a vector of row indices belonging to each unique observation ID.
 % eg: if subject 1 has rows [1,2,3] and subject 2 has rows [4,5,6], then rowIdxByObs{1} = [1;2;3] and rowIdxByObs{2} = [4;5;6]
 
-
-
-%% delete this entire cell // obsolete/superseded by previous cell
-% organize row indices by group membership for stratified resampling.
-% legacy code from a previous implementation
-% groupRowsByG    = cell(nUnique_groups, 1);
-% origGroupRowCnt = zeros(nUnique_groups, 1);
-% if nUnique_indFactors > 0
-%     for gIdx = 1:nUnique_groups
-%         % Find observations belonging to this group by comparing their 
-%         % indFactor values (stored in groupBelonging) with the current group's identifier
-%         group_mask = true(nUnique_obsID, 1);
-%         for obsIdx = 1:nUnique_obsID
-%             if isempty(groupBelonging{obsIdx})
-%                 group_mask(obsIdx) = false;
-%             else
-%                 % Check if this observation's group matches current group
-%                 match = all(groupBelonging{obsIdx} == unique_groups{gIdx,:}, 2);
-%                 group_mask(obsIdx) = any(match);
-%             end
-%         end
-%         % Collect all row indices from observations in this group
-%         obs_in_group = find(group_mask);
-%         groupRowsByG{gIdx} = vertcat(rowIdxByObs{obs_in_group});
-%         origGroupRowCnt(gIdx) = numel(groupRowsByG{gIdx});
-%     end
-% else
-%     % Single group: all observations belong to one group
-%     groupRowsByG{1} = (1:nRow)';
-%     origGroupRowCnt(1) = nRow;
-% end
-
 %% generate indices
 
 % note: 
@@ -184,30 +158,29 @@ rowIdxByObs = accumarray(obsIdxPerRow, (1:nRow)', [], @(x){x});
 
 switch char(di_cfg.analysis.objective)
     case 'permutationH0testing'
-        switch H0hypothesis
-            case {'between', 'within-by-group'}
-                % Shuffle entire observations across positions while preserving
-                % each observation's full repeated-measures structure.
-                rowIdx = zeros(nRow, nIterations);
-                rowIdx(:,1) = (1:nRow)';
-                for itIdx = 2:nIterations
-                    permuted_obsIdx = randperm(nUnique_obsID);
-                    rowIdx(:,itIdx) = vertcat(rowIdxByObs{permuted_obsIdx});
+        if permute_WholeObservation_logic
+            % PATH A: shuffle whole observations while preserving each
+            % observation's repeated-measures block.
+            rowIdx = zeros(nRow, nIterations);
+            rowIdx(:,1) = (1:nRow)';
+            for itIdx = 2:nIterations
+                permuted_obsIdx = randperm(nUnique_obsID);
+                rowIdx(:,itIdx) = vertcat(rowIdxByObs{permuted_obsIdx});
+            end
+        elseif permute_WithinObservation_logic
+            % PATH B: shuffle repeated-measure rows within each observation.
+            rowIdx = zeros(nRow, nIterations);
+            rowIdx(:,1) = (1:nRow)';
+            for itIdx = 2:nIterations
+                rowIdx(:,itIdx) = (1:nRow)';
+                for obsIdx = 1:nUnique_obsID
+                    idx = rowIdxByObs{obsIdx};
+                    idx_shuffled = idx(randperm(length(idx)));
+                    rowIdx(idx,itIdx) = idx_shuffled;
                 end
-
-            case {'within', 'between-by-condition'}
-                % Shuffle repeated measures within each observation; observation
-                % identities are preserved.
-                rowIdx = zeros(nRow, nIterations);
-                rowIdx(:,1) = (1:nRow)';
-                for itIdx = 2:nIterations
-                    rowIdx(:,itIdx) = (1:nRow)';
-                    for obsIdx = 1:nUnique_obsID
-                        idx = rowIdxByObs{obsIdx};
-                        idx_shuffled = idx(randperm(length(idx)));
-                        rowIdx(idx,itIdx) = idx_shuffled;
-                    end
-                end
+            end
+        else
+            error('Unsupported permuteUnit for permutationH0testing: %s', permuteUnit);
         end
 
     case 'bootstrapStability'
@@ -255,12 +228,11 @@ if strcmp(di_cfg.analysis.objective, 'permutationH0testing')
     end
 end
 
-% sanity check: for permutation with repeated measures, repeated measures still belong to the original observation
+% sanity check: for within-observation permutation, repeated measures still belong to the original observation
 % this verifies that within-subject shuffling preserves observation identity
 % (conditions are shuffled within each subject, but no condition moves to a different subject)
 if strcmp(di_cfg.analysis.objective, 'permutationH0testing')
-    is_within_shuffle = any(strcmp(di_cfg.analysis.H0hypothesis, {'within', 'between-by-condition'}));
-    if is_within_shuffle % H0 implies within-observation shuffling
+    if permute_WithinObservation_logic % permuteUnit implies within-observation shuffling
     for itIdx = 2:nIterations % start from 2 since itIdx 1 is original data
         for obsIdx = 1:nUnique_obsID
             % get the row indices that originally belong to this observation
@@ -292,23 +264,23 @@ if strcmp(di_cfg.analysis.objective, 'permutationH0testing')
     end
 end
 
-% sanity check: for between-observation permutation hypotheses
+% sanity check: for whole-observation permutation
 % verify that each observation appears exactly once and its full set of repeated measures stays intact
 if strcmp(di_cfg.analysis.objective, 'permutationH0testing')
-    if any(strcmp(di_cfg.analysis.H0hypothesis, {'between', 'within-by-group'}))
+    if permute_WholeObservation_logic
         for itIdx = 2:nIterations % start from 2 since itIdx 1 is original data
             permuted_obsIDs = dataStruct.observationID(rowIdx(:, itIdx));
             for obsIdx = 1:nUnique_obsID
                 original_count = numel(rowIdxByObs{obsIdx});
                 current_count = sum(permuted_obsIDs == unique_obsID(obsIdx));
                 if current_count ~= original_count
-                    error('Iteration %d, Observation %d: H0_between permutation broke observation integrity. Expected %d rows, got %d.', ...
+                    error('Iteration %d, Observation %d: wholeObservation permutation broke observation integrity. Expected %d rows, got %d.', ...
                         itIdx, obsIdx, original_count, current_count);
                 end
             end
         end
         if di_cfg.analysis.verbose
-            fprintf('permutation mixed design (H0_between) verification: observations preserved with full repeated measures\n');
+            fprintf('permutation verification (whole-observation path): observations preserved with full repeated measures\n');
         end
     end
 end
