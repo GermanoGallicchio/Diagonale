@@ -2,7 +2,7 @@ function designOptions = di_designOptions()
 % Returns table of design codes and their interpretations
 %
 % Creates a lookup table mapping 2-digit binary design codes. 
-% Used for reporting and validation.
+% Used for standardizing design options.
 %
 % OUTPUT:
 %   designOptions - table with columns:
