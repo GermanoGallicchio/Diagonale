@@ -49,16 +49,16 @@ end
 
 % sanity check: analysis.type must be of the allowed kind
 if ~any(strcmp(di_cfg.analysis.type,analysisTypes))
-    disp("allowed types: ")
+    disp("\\ allowed types: ")
     disp(analysisTypes')
-    error('di_cfg.analysis.type must be of any of the allowed types');
+    error('\\ di_cfg.analysis.type must be of any of the allowed types');
 end
 
 % sanity check: analysis.objective must be of the allowed objectives
 if ~any(strcmp(di_cfg.analysis.objective,analysisObjectives))
-    disp("allowed objectives: ")
+    disp("\\ allowed objectives: ")
     disp(analysisObjectives)
-    error('di_cfg.analysis.objective must be of any of the allowed objectives');
+    error('\\ di_cfg.analysis.objective must be of any of the allowed objectives');
 end
 
 % subject-centering mode
@@ -183,23 +183,21 @@ varNames = di_cfg.analysis.dataStruct.Properties.VariableNames;
 nRows    = height(di_cfg.analysis.dataStruct);
 if ~any(strcmp(varNames, 'observationID'))
     di_cfg.analysis.dataStruct.observationID = (1:nRows)';
-    warning('dataStruct has no observationID column. Adding observationID = (1:%d)'' (assuming each row is a unique independent observation).', nRows)
-    disp('note: if my assumption is not correct, create a di_cfg.analysis.dataStruct.observationID variable)')
+    warning('\\ dataStruct has no observationID column. Adding observationID = (1:%d)'' (assuming each row is a unique independent observation).', nRows)
+    disp('\\ note: if my assumption is not correct, create a di_cfg.analysis.dataStruct.observationID variable)')
 end
 if ~any(startsWith(varNames, 'indFactor'))
     di_cfg.analysis.dataStruct.indFactor1 = ones(nRows, 1);
-    warning('dataStruct has no indFactor# column. Adding indFactor1 = ones(%d,1) (treating all observations as one group).', nRows)
-    disp('I am assuming you do not want to compare between independent observations.')
-    disp('note: to achieve the same and not see the warning above, create a di_cfg.analysis.dataStruct.indFactor1 variable and use all 1s)')
+    warning('\\ dataStruct has no indFactor# column. Adding indFactor1 = ones(%d,1) (treating all observations as one group).', nRows)
+    disp('\\ I am assuming you do not want to compare between independent observations.')
+    disp('\\ note: to achieve the same and not see the warning above, create a di_cfg.analysis.dataStruct.indFactor1 variable and use all 1s)')
 end
 if ~any(startsWith(varNames, 'repFactor'))
     di_cfg.analysis.dataStruct.repFactor1 = ones(nRows, 1);
-    warning('dataStruct has no repFactor# column. Adding repFactor1 = ones(%d,1) (treating all observations as one condition).', nRows)
-    disp('I am assuming you do not want to compare between repeated observations.')
-    disp('note: to achieve the same and not see the warning above, create a di_cfg.analysis.dataStruct.repFactor1 variable and use all 1s)')
+    warning('\\ dataStruct has no repFactor# column. Adding repFactor1 = ones(%d,1) (treating all observations as one condition).', nRows)
+    disp('\\ I am assuming you do not want to compare between repeated observations.')
+    disp('\\ note: to achieve the same and not see the warning above, create a di_cfg.analysis.dataStruct.repFactor1 variable and use all 1s)')
 end
-
-
 
 %% defaults
 
@@ -245,28 +243,25 @@ if strcmp(di_cfg.analysis.type,'parametricFeature_inferenceCluster')
             di_cfg.analysis.clusterParams = struct();
         end
         di_cfg.analysis.clusterParams.clusterFormingPvalThreshold = 0.05;
-        warning(['di_cfg.analysis.clusterParams.clusterFormingPvalThreshold not provided. I am using ' num2str(di_cfg.analysis.clusterParams.clusterFormingPvalThreshold) ' by default'])
+        warning(['\\ di_cfg.analysis.clusterParams.clusterFormingPvalThreshold not provided. I am using ' num2str(di_cfg.analysis.clusterParams.clusterFormingPvalThreshold) ' by default'])
     end
 end
 
 
-
-
-
 if ~isfield(di_cfg.analysis,'verbose')
     di_cfg.analysis.verbose = true;
-    warning(['di_cfg.analysis.verbose not provided. I am using logical ' num2str(di_cfg.analysis.verbose) ' by default'])
+    warning(['\\ di_cfg.analysis.verbose not provided. I am using logical ' num2str(di_cfg.analysis.verbose) ' by default'])
 end
 
 
 if ~isfield(di_cfg.analysis,'figFlag')
     di_cfg.analysis.figFlag = true;
-    warning(['di_cfg.analysis.figFlag not provided. I am using logical ' num2str(di_cfg.analysis.figFlag) ' by default'])
+    warning(['\\ di_cfg.analysis.figFlag not provided. I am using logical ' num2str(di_cfg.analysis.figFlag) ' by default'])
 end
 
 %% validation done
 % add a validated flag
 di_cfg.validation.analysis = true;
 
-disp('Diagonale: analysis validated')
+disp('\\ analysis validated')
 end
