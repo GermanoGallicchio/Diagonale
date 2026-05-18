@@ -15,8 +15,8 @@ function designCode = di_parseDesign(di_cfg, Y)
 % OUTPUT:
 %   designCode  - 1x2 binary vector [repMeasures, indGroups]
 %                 [0 0]: Correlation/association (no factors)
-%                 [0 1]: Independent observations comparison
-%                 [1 0]: Repeated measures comparison
+%                 [0 1]: At least one Independent observations factor
+%                 [1 0]: At least one Repeated measures factor
 %                 [1 1]: Mixed design (independent + repeated measures)
 %
 % watch out for:
@@ -25,57 +25,24 @@ function designCode = di_parseDesign(di_cfg, Y)
 %
 % Author: Germano Gallicchio (germano.gallicchio@gmail.com)
 
-
 %% sanity checks
 
 varLbl = di_cfg.analysis.dataStruct.Properties.VariableNames;
 
-% TO DO: delete this section
-% if indFactor# not entered in dataStruct: put 1s all over
-% if ~any(startsWith(varLbl,'indFactor'))
-%     warning('"indFactor#" column(s) in di_cfg.analysis.dataStruct not entered. I am assuming you do not want to compare between independent observations.')
-%     disp('note: to achieve the same and not see the warning above create a di_cfg.analysis.dataStruct.indFactor1 variable and use all 1s)')
-%     di_cfg.analysis.dataStruct.indFactor1 = ones(size(di_cfg.analysis.dataStruct,1),1);
-% end
+% if indFactor# not entered in dataStruct: error
+if ~any(startsWith(varLbl,'indFactor'))
+    error('\ "indFactor#" column(s) in di_cfg.analysis.dataStruct not entered')
+end
 
-% TO DO: delete this section
-% if repFactor# not entered in dataStruct: put 1s all over
-% if ~any(startsWith(varLbl,'repFactor'))
-%     warning('"repFactor#" column(s) in di_cfg.analysis.dataStruct not entered. I am assuming you do not want to compare between repeated observations.')
-%     disp('note: to achieve the same and not see the warning above create a di_cfg.analysis.dataStruct.repFactor1 variable and use all 1s)')
-%     di_cfg.analysis.dataStruct.repFactor1 = ones(size(di_cfg.analysis.dataStruct,1),1);
-% end
+% if repFactor# not entered in dataStruct: error
+if ~any(startsWith(varLbl,'repFactor'))
+    error('\\ "repFactor#" column(s) in di_cfg.analysis.dataStruct not entered')
+end
 
-% TO DO: delete this section
 % dataStruct must include one observationID column
-% if ~any(contains(varLbl,'observationID'))
-%     warning('"observationID" column in di_cfg.analysis.dataStruct not entered. I might make a guess in a future version... but not yet.')
-%     %disp('note: if my guess is not accurate create a di_cfg.analysis.dataStruct.observationID variable)')
-%     error('di_cfg.analysis.dataStruct.observationID is needed')
-% end
-
-% update varLbl
-% varLbl = di_cfg.analysis.dataStruct.Properties.VariableNames;
-
-%% pull information from the table
-% TO DO: delete this cell
-
-% % nIterations = di_cfg.analysis.nIterations;  % delete this line
-% 
-% % num of rows
-% m = size(di_cfg.analysis.dataStruct,1); 
-% 
-% % numerosity of independent observations
-% [uniqueObservationID,~,~] = unique(di_cfg.analysis.dataStruct.observationID,'stable');
-% uniqueObservationID_numerosity = length(uniqueObservationID);
-% 
-% % numerosity of levels in indFactor1
-% uniqueIndFactor1 = string(unique(di_cfg.analysis.dataStruct.indFactor1,'stable'));
-% uniqueIndFactor1_numerosity = length(uniqueIndFactor1);
-% 
-% % numerosity of levels in repFactor# (all repFactors pooled)
-% repeatedObservationID_numerosity = m / uniqueObservationID_numerosity;
-
+if ~any(contains(varLbl,'observationID'))
+    error('\\ "observationID" column in di_cfg.analysis.dataStruct not entered.')
+end
 
 %% pull information from the table
 
@@ -114,16 +81,6 @@ if length(unique(obsID_counts)) > 1
     warning('unbalanced design detected: observations have different numbers of repeated measures (range: %d to %d).', ...
         min(obsID_counts), max(obsID_counts));
 end
-
-%% sanity checks
-% TO DO: delete this cell
-% delete this cell because it won't work (hence it wont be useful) if the
-% design is unbalanced whereby subjs have different number of rep measures
-
-% % number of observationID repeats must match num of unique overall RM levels
-% if ~repeatedObservationID_numerosity==nUnique_repFactorLevels
-%     error('likely user design error: the number of observationID repeats must match the number of unique repeated-measure levels (overall across factors)')
-% end
 
 %% deduct intended design
 
@@ -164,11 +121,12 @@ if di_cfg.analysis.figFlag
     box off
     axis off
     colormap(parula)
+    colorbar;
 end
 
 %% 
 if di_cfg.analysis.verbose
     rowIdx = (designOptions{:,"codeDec"}==bin2dec(num2str(designCode)))';
-    fprintf(['\n' 'Design num is: ' num2str(designOptions{rowIdx,"codeDec"}) ', ' designOptions{rowIdx,"lbl"}{1} '\n'])
+    fprintf(['\n' '\\ Design num is: ' num2str(designOptions{rowIdx,"codeDec"}) ', ' designOptions{rowIdx,"lbl"}{1} '\n'])
 end
 
