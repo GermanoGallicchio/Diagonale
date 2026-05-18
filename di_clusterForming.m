@@ -103,7 +103,6 @@ end
 % - edges reèresent nonzero value at the intersection between two nodes
 %   - note: if the matrix is symmetric, the graph is nondirectional
 %   - note2: edge's magnitude does not matter
-
 G = graph(adjacencyMatrix);
 
 % step 2: keep only a subset of the graph G including only the nodes 
