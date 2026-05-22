@@ -14,8 +14,7 @@ function pval_emp_FDR = di_fdrPoolCorrect(pval_emp, ignore_col, dimSizes, poolDi
 % OUTPUT:
 %   pval_emp_FDR - 1 x pX vector of BH-FDR corrected p-values
 %
-% notes: it previously used mafdr from the Bioinformatics toolbox.
-% it now used a custom implementation of the same FDR-BH procedure via di_FDR_BH.m that is base MATLAB only.
+% notes: this is sent to another function that applies to BH procedure. this is just to prepare the p values
 %
 % Author: Germano Gallicchio (germano.gallicchio@gmail.com)
 
