@@ -117,7 +117,7 @@ if di_cfg.analysis.figFlag
     figure()
     imagesc(normalize(Y,'range',[-1 1]))
     title('structure of Y')
-    axis equal
+    %axis equal
     box off
     axis off
     colormap(parula)
