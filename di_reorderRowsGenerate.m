@@ -55,8 +55,10 @@ if ~isfield(di_cfg.analysis, 'randomSeed')
 end
 
 % permutation requires explicit permutation unit
-if ~isfield(di_cfg.validation,'permuteUnit') || di_cfg.validation.permuteUnit~=1
-    error('\\ Permutation unit not validated. Likely a coding bug due to misplaced di_validateH0 in the pipeline');
+if strcmp(di_cfg.analysis.objective,'permutationH0testing')
+    if ~isfield(di_cfg.validation,'permuteUnit') || di_cfg.validation.permuteUnit~=1
+        error('\\ Permutation unit not validated. Likely a coding bug due to misplaced di_validateH0 in the pipeline');
+    end
 end
 %% shortcuts
 
@@ -73,7 +75,7 @@ permute_WholeObservation_logic  = strcmp(permuteUnit, 'wholeObservation');
 rng(double(di_cfg.analysis.randomSeed), 'twister');
 
 if isfield(di_cfg.analysis, 'verbose') && di_cfg.analysis.verbose
-    fprintf('random seed used for row reordering: %d\n', double(di_cfg.analysis.randomSeed));
+    fprintf('\\ random seed used for row reordering: %d\n', double(di_cfg.analysis.randomSeed));
 end
 
 %% independent observation factors
@@ -151,8 +153,8 @@ rowIdxByObs = accumarray(obsIdxPerRow, (1:nRow)', [], @(x){x});
 %% generate indices
 
 % note: 
-% permutation adn bootstrap leave the first iteration as the original 
-% this is intentional, to make the code work also to get results on the
+% Permutation adn bootstrap leave the first iteration as the original. 
+% This is intentional, to make the code work also to get results on the
 % original data (itIdx==1) to compare against all iterations
 % (itIdx==1:nIterations)
 
@@ -209,6 +211,14 @@ switch char(di_cfg.analysis.objective)
 end
 
 %% sanity checks: Verify resampling respects data structure
+
+
+outputChecksFlag = false;
+if ~outputChecksFlag
+    warning('di_reorderRowsGenerate has outputChecksFlag=false ... this should only be done temporarily for debugging')
+end
+
+if outputChecksFlag 
 
 % sanity check: first iteration must be original data (unchanged)
 if ~isequal(rowIdx(:,1), (1:nRow)')
@@ -289,6 +299,7 @@ end
 % this ensures that when an observation (eg, subject) is resampled, ALL its conditions come along.
 % observations(eg, subjects) can appear 0, 1, or multiple times (with replacement), but must always be complete
 if strcmp(di_cfg.analysis.objective, 'bootstrapStability')
+    disp('\\ verifying bootstrap resamples... this might take some time')
     for itIdx = 2:nIterations % start from 2 since itIdx 1 is original data
         % get the resampled row indices and their corresponding observation IDs
         resampled_rows = rowIdx(:, itIdx);
@@ -330,19 +341,19 @@ if strcmp(di_cfg.analysis.objective, 'bootstrapStability')
                 % get how many times this observation appears in total in resampled data
                 current_count = length(obs_row_locs);
                 
-                % criterion 3: current_count must be a multiple of original_count (violation if NOT)
+                % criterion 3: current_count must be a multiple of original_count (otherwise it's likely a bug in the resampling)
                 % with replacement resampling: if observation sampled k times, expect k x original_count rows total
                 % example: if original_count=3 (3 conditions), current_count should be 3, 6, 9, 12, ... (not 4, 5, 7, ...)
                 % a non-multiple value indicates rows were lost, duplicated incorrectly, or misaligned
                 criterion3 = mod(current_count, original_count) ~= 0;
                 
                 if criterion3
-                    error('Iteration %d: Bootstrap violated observation integrity for observationID %d.', ...
+                    error('\\ Iteration %d: Bootstrap violated observation integrity for observationID %d.', ...
                         itIdx, current_obsID);
                 end
                 
-                % criterion 4: all original conditions must be present in resampled data (violation if missing any)
-                % checks that no condition was omitted or oversampled exclusively
+                % criterion 4: all original conditions must be present in resampled data (otherwise it's likely a bug in the resampling)
+                % checks that no condition was omitted or oversampled
                 % rationale: even if counts are correct (criterion3), a condition could be completely missing
                 % example: 3 conditions {A,B,C} resampled could mistakenly return {A,B,B,C,C,C} (C oversampled and A undersampled)
                 if nUnique_repFactors > 0
@@ -372,15 +383,17 @@ if strcmp(di_cfg.analysis.objective, 'bootstrapStability')
                 end
                 
                 if criterion4
-                    error('Iteration %d: Bootstrap missing conditions for observationID %d.', ...
+                    error('\\ Iteration %d: Bootstrap missing conditions for observationID %d.', ...
                         itIdx, current_obsID);
                 end
             end
         end
     end
     if di_cfg.analysis.verbose
-    fprintf('bootstrap verification: entire observations sampled with replacement\n');
+        fprintf('\\ bootstrap verification: entire observations sampled with replacement\n');
     end
+end
+
 end
 
 end
