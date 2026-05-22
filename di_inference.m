@@ -71,18 +71,24 @@ function results = di_inference(di_cfg,results)
 %           for bootstrap, PLS_SVD
 %                   stored in .simulated.bootstrapStability.loadings.inference:
 %                   .U_sd, .V_sd                - standard deviation of loadings
-%                   .U_ci, .V_ci                - 95% confidence intervals [lower, upper]
+%                   .U_BR, .V_BR                - bootstrap ratio (observed / bootstrap SD)
+%                   .U_95CIlo, .U_95CIup        - lower/upper 95% confidence interval for U loadings
+%                   .V_95CIlo, .V_95CIup        - lower/upper 95% confidence interval for V loadings
+%                   .U_ci, .V_ci                - 95% confidence intervals [lower, upper] (stacked)
 %                   .U_aligned, .V_aligned      - Procrustes-aligned bootstrap samples
 %           for bootstrap, AJIVE
 %                   .mode       not yet implemented
 %
 % Author: Germano Gallicchio (germano.gallicchio@gmail.com)
 
-
 %% shortcuts
 
-% p value for inference
-p_crit = di_cfg.analysis.p_crit;
+% p value for inference (only used by permutation testing paths; not set for bootstrapStability)
+if isfield(di_cfg.analysis, 'p_crit')
+    p_crit = di_cfg.analysis.p_crit;
+else
+    p_crit = [];  % not needed for bootstrap; will error naturally if mistakenly used
+end
 
 % num of iterations
 nIterations = di_cfg.analysis.nIterations;
@@ -101,35 +107,35 @@ ignore_col = di_cfg.analysis.ignore_col;
 
 % only one spherical dimenion is allowed
 if nnz(strcmp(dimTypes, 'spherical')) > 1
-    error('Only one spherical dimension is supported');
+    error('\\ Only one spherical dimension is supported');
 end
 
 % ignore_col and dimensions must have same numerosity
 if numel(ignore_col) ~= pX
-    error('ignore_col must have one entry per feature across all dimensions');
+    error('\\ ignore_col must have one entry per feature across all dimensions');
 end
 
 % validate that results structure exists and has required fields
 if ~isstruct(results)
-    error('results must be a struct');
+    error('\\ results must be a struct');
 end
 if ~isfield(results, 'observed')
-    error('results must have .observed field');
+    error('\\ results must have .observed field');
 end
 if ~isfield(results.observed, 'statVal')
-    error('results.observed must have .statVal field');
+    error('\\ results.observed must have .statVal field');
 end
 
 
 % check that di_cfg has objective and analysis fields
 if ~isfield(di_cfg, 'analysis')
-    error('di_cfg must have .analysis field');
+    error('\\ di_cfg must have .analysis field');
 end
 if ~isfield(di_cfg.analysis, 'objective')
-    error('di_cfg.analysis must have .objective field (permutationH0testing or bootstrapStability)');
+    error('\\ di_cfg.analysis must have .objective field (permutationH0testing or bootstrapStability)');
 end
 if ~isfield(di_cfg.analysis, 'type')
-    error('di_cfg.analysis must have .type field');
+    error('\\ di_cfg.analysis must have .type field');
 end
 
 
@@ -168,60 +174,8 @@ switch key
             pval_emp(1, colIdx) = sum(abs(vals_perm) >= abs(val_obs)) / nIterations;
         end
         
-        % --- start FDR correction --- 
-        % TO DO: move to its own function
-        % TO DO: make my own fdr correction (Benjamini Hochberg) without Bioinfomatics Toolbox's mafdr
-
-        % Description: restructure p values (and ignore_col) so that p values are in columns 
-        % where each column is an FDR pool. For exmample, if FDR_dimensions are all 1s, there is just one big pool
-        % the p values will be reshaped to the original after the FDR
-        % correction.
-
-        % initialize
-        pval_emp_FDR = nan(1, size(statVal_obs, 2));
-
-        % FDR pooling selection across dimensions (logical vector over all dims)
-        % shortcut
-        poolDims = di_cfg.analysis.FDR_dimensions;
-        % sanity check: num of FDR instructions match num of dimensions
-        if numel(poolDims) ~= nDims
-            error('analysis.FDR_dimensions must match the number of dimensions');
-        end
-        % find idx of dimensions to FDR correct and not correct
-        FDRdim_idx = find(poolDims); % dimensions to pool for the correction
-        otherdim_idx = setdiff(1:nDims, FDRdim_idx, 'stable'); % the other dimensions
-
-        % permute to bring upfront the dimensions over which pvalues will be pooled
-        perm  = [FDRdim_idx, otherdim_idx];
-        pval_emp_permuted = permute(reshape(pval_emp, dimSizes'), perm);
-        R_ignore_permuted = permute(reshape(ignore_col, dimSizes'), perm); % same thing to ignore_col
-
-        % reshape to matrix to have columns of p values upon which the correction is applied (one iteration per column)
-        sz = size(pval_emp_permuted);
-        L  = prod(sz(1:numel(FDRdim_idx)));
-        M  = prod(sz(numel(FDRdim_idx)+1:end));
-        pval_emp_matrix = reshape(pval_emp_permuted, L, M);
-        R_ignore_matrix = reshape(R_ignore_permuted, L, M); % same thing to ignore_col
-
-        % apply FDR-BH along each column
-        pval_emp_FDR_matrix = nan(size(pval_emp_matrix));
-        for colIdx = 1:M
-            pvalVec    = pval_emp_matrix(:,colIdx);
-            RignoreVec = R_ignore_matrix(:,colIdx);
-            pvalVec2use = pvalVec(~RignoreVec); % remove the p values corresponding with features that are not of interest in this analysis
-            % if pvalVec2use is empty (e.g., because this feature is totally ignored), move on
-            if isempty(pvalVec2use)
-                continue
-            end
-            pvalVec2use_FDR = mafdr(pvalVec2use , 'BHFDR', true);  % FDR BH correction
-            pval_emp_FDR_matrix(~RignoreVec,colIdx) = pvalVec2use_FDR; % collocate pvalues in the longer matrix where they belong
-        end
-
-        % reshape back
-        pval_emp_FDR_permuted = reshape(pval_emp_FDR_matrix, sz);
-        pval_emp_FDR = reshape(ipermute(pval_emp_FDR_permuted, perm),[1 pX]);
-
-        % --- end of FDR correction --
+        % FDR correction 
+        pval_emp_FDR = di_fdrPoolCorrect(pval_emp, ignore_col, dimSizes, di_cfg.analysis.FDR_dimensions);
 
         % figure
         if di_cfg.analysis.figFlag
@@ -248,7 +202,7 @@ switch key
     case 'permutationH0testing + empiricalFeature_inferenceCluster'
         % not implemented, not difficult to code, but difficult for a
         % computer to run: it requires nIterations per each iteration, so nIterations^2...
-        error('not coded. probably I will never code this one')
+        error('\\ not coded. probably I will never code this one')
 
     case 'permutationH0testing + parametricFeature_inferenceFeature'
         % - per feature: compare observed statistic against null distribution (permutation)
@@ -267,22 +221,31 @@ switch key
         %keyboard; % check this analysis works after the changes
 
     case 'permutationH0testing + PLS_SVD'
-        % - per each mode, compares observed singular values against its null distribution
-        % two types of correction (on singular values, inertia, correlation): 
-        % - sequential correction
-        % - maxT correction on mode-level statistics
-        %    OBS    - Not yet fully implemented
-        warning('not yet done');
-        % TODO: Implement mode-wise maxT inference similar to di_maxT.m but for modes
+        % Mode-level permutation inference of SV metrics with maxT correction
+        % - Per each mode, compares observed SV-based metrics against their null distributions
+        % - Applies maxT correction across modes for multiple metrics:
+        %   * singular values (s): covariance captured by each mode
+        %   * total inertia: sum of all singular values
+        %   * Wilks lambda: cumulative variance (from end)
+        %   * sequential variance: cumulative variance (from start)
+        % - maxT controls FWER across modes within each metric
+        
+        % Compute uncorrected empirical p-values per mode
+        % Each mode compared against its own null distribution
+        results = di_empiricalP(di_cfg, results);
+        
+        % Compute maxT-corrected p-values (FWER control)
+        % Each mode compared against max across all modes per iteration
+        results = di_maxT(di_cfg, results);
     
     case 'permutationH0testing + AJIVE'
-        error('not coded yet')
+        error('\\ not coded yet')
 
     case 'bootstrapStability + empiricalFeature_inferenceFeature'
         % - per each feature, use resampled distribution to compute statistical scores stability
         % - optional, form clusters for descriptive purposes (done elsewhere, downstream)
 
-        keyboard; % check this works after the changes
+keyboard; % check this works after the changes
 
         % Get observed statistics and bootstrap distribution from unified structure
         statVal_obs = results.observed.statVal;  % [1 x pX]
@@ -336,102 +299,67 @@ switch key
 %       vectors stability
 %       - optional, form clusters for descriptive purposes
 %    OBS    - Not yet fully implemented
-% 
-        keyboard; % check it works after the changes
 
 % PLS-SVD + BOOTSTRAP: Assess stability of PLS loadings via bootstrap resampling
         %
         % STATISTICAL RATIONALE:
         %   Bootstrap resampling estimates sampling variability of PLS loadings.
-        %   Narrow confidence intervals → stable loadings (reliable interpretation)
-        %   Wide confidence intervals → unstable loadings (interpret with caution)
-        %
-        % WORKFLOW:
-        %   1. Extract observed loadings and bootstrap samples
-        %   2. Align bootstrap samples using Procrustes (remove rotational ambiguity)
-        %   3. Compute stability metrics (SD, confidence intervals)
-        %
-        % OUTPUT:
-        %   .inference.U_sd, .V_sd        - Standard deviation of loadings
-        %   .inference.U_ci, .V_ci        - 95% confidence intervals
-        %   .inference.U_aligned, .V_aligned - Aligned bootstrap samples
-        
+        %   stable loadings (reliable interpretation) have greater
+        %   bootstrap ratios and narrower confidence intervals
+
         % STEP 1: Extract observed loadings (reference for alignment)
         U_obs = results.PLS_SVD.loadings.U_obs;      % (pY x nModes) observed Y loadings
         V_obs = results.PLS_SVD.loadings.V_obs;      % (pX x nModes) observed X loadings
+
+        nIterations = di_cfg.analysis.nIterations;
+        nModes = size(U_obs,2);
         
-        % STEP 2: Extract bootstrap loading samples (from di_analysis_plsSVD.m)
-        % These already have sign convention applied (aligned to observed via di_signConvention)
-        % but may still have rotational ambiguity in multi-mode subspace
+        % STEP 2: Extract bootstrapped loadings (these are already
+        % sign-aligned and rotated)
         U_boot = results.simulated.bootstrapStability.loadings.U_boot;   % (pY x nModes x nIterations)
         V_boot = results.simulated.bootstrapStability.loadings.V_boot;   % (pX x nModes x nIterations)
-        nIterations = di_cfg.analysis.nIterations;
         
-        % STEP 3: Procrustes alignment
-        % Remove rotational ambiguity by finding optimal orthogonal rotation
-        % that aligns each bootstrap sample to observed loadings.
-        % Why needed: SVD has two ambiguities:
-        %   - Sign ambiguity (±): handled by di_signConvention in di_analysis_plsSVD.m
-        %   - Rotation (multi-mode): handled here via Procrustes
-        % Example: With 2 modes, bootstrap samples can rotate in 2D plane
-        %          even after sign correction. Procrustes finds the rotation
-        %          that best matches observed orientation.
-        [U_aligned, V_aligned] = di_procrustesAlign(U_obs, V_obs, U_boot, V_boot, nIterations);
+        % STEP 3: Compute loading variability metrics
+        % Bootstrap ratio (observed / bootstrap SD), conventional
+        % set tolerance
+        eps0 = 1e-10;
+        % initialize
+        % TO DO: I might set these to zero, so if below toleratnce, they
+        % get zero rather than NaN
+        U_BR = nan(size(U_obs)); 
+        V_BR = nan(size(V_obs));
+        % compute SD across iterations
+        U_sd = std(U_boot, 0, 3);  % (pY x nModes)
+        V_sd = std(V_boot, 0, 3);  % (pX x nModes)
+        % find idx across iterations of loadings with SD above tolerance
+        % (meaningful variation across iterations) and to avoid diving by a
+        % tiny number (potentially zero)
+        U_valid = abs(U_sd) > eps0;
+        V_valid = abs(V_sd) > eps0;
+        % compute BR only for valid loadings
+        U_BR(U_valid) = U_obs(U_valid) ./ U_sd(U_valid);
+        V_BR(V_valid) = V_obs(V_valid) ./ V_sd(V_valid);
+        results.simulated.bootstrapStability.loadings.inference.U_BR = U_BR;
+        results.simulated.bootstrapStability.loadings.inference.V_BR = V_BR;
         
-        % STEP 4: Compute loading variability metrics
-        % Standard deviation quantifies element-wise variability across bootstrap samples
-        % Dimension 3 is the iteration dimension (nIterations)
-        results.simulated.bootstrapStability.loadings.inference.U_sd = std(U_aligned, 0, 3);  % (pY x nModes)
-        results.simulated.bootstrapStability.loadings.inference.V_sd = std(V_aligned, 0, 3);  % (pX x nModes)
-        
-        % STEP 5: Compute bootstrap confidence intervals (percentile method)
+        % STEP 4: Compute bootstrap confidence intervals (percentile method)
         % 95% CI = [2.5th percentile, 97.5th percentile] across bootstrap distribution
-        % Output dimensions: (pY x nModes x 2) for U_ci, (pX x nModes x 2) for V_ci
-        % where (:,:,1) is lower bound and (:,:,2) is upper bound
-        results.simulated.bootstrapStability.loadings.inference.U_ci = prctile(U_aligned, [2.5 97.5], 3);
-        results.simulated.bootstrapStability.loadings.inference.V_ci = prctile(V_aligned, [2.5 97.5], 3);
+        U_95CIlo = prctile(U_boot, 2.5, 3);
+        U_95CIup = prctile(U_boot, 97.5, 3);
+        V_95CIlo = prctile(V_boot, 2.5, 3);
+        V_95CIup = prctile(V_boot, 97.5, 3);
+        results.simulated.bootstrapStability.loadings.inference.U_95CIlo = U_95CIlo;
+        results.simulated.bootstrapStability.loadings.inference.U_95CIup = U_95CIup;
+        results.simulated.bootstrapStability.loadings.inference.V_95CIlo = V_95CIlo;
+        results.simulated.bootstrapStability.loadings.inference.V_95CIup = V_95CIup;
         
-        % STEP 6: Store aligned loadings for diagnostic purposes
-        % Users may want to inspect the full aligned bootstrap distribution
-        % (e.g., check for multimodality, non-normality, outliers)
-        results.simulated.bootstrapStability.loadings.inference.U_aligned = U_aligned;  % (pY x nModes x nIterations)
-        results.simulated.bootstrapStability.loadings.inference.V_aligned = V_aligned;  % (pX x nModes x nIterations)
-    
     case 'bootstrapStability + AJIVE'
         error('not yet coded')
 
 end
 
 %% output validation
+% TO DO: think of something to include, but very low priority
 
-% check that inference has been applied (at least one new field added)
-inference_added = false; % initialize to false
-
-% check for empirical-specific fields
-if isfield(results, 'inference') && isfield(results.inference, 'feature') && isfield(results.inference.feature, 'pVal_emp_FDR')
-    if ~all(isnan(results.inference.feature.pVal_emp_FDR)) || ~isempty(results.inference.feature.pVal_emp_FDR)
-        inference_added = true;
-    end
-end
-
-% check for bootstrap-specific fields
-if isfield(results, 'inference') && isfield(results.inference, 'feature')
-    if isfield(results.inference.feature, 'BR_rob')
-        inference_added = true;
-    end
-end
-
-% check for cluster-specific fields
-if isfield(results, 'inference') && isfield(results.inference, 'cluster')
-    inference_added = true;
-end
-
-% warn if no inference fields were detected... it might indicate unimplemented path
-if ~inference_added
-    switch [di_cfg.analysis.objective ' & ' di_cfg.analysis.type]
-        case {'permutationH0testing & empiricalFeature_inferenceFeature', 'permutationH0testing & parametricFeature_inferenceCluster'}
-            warning('No inference fields detected in results - check that inference was actually computed');
-    end
-end
 
 end
