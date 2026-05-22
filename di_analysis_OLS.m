@@ -1,4 +1,4 @@
-function results = di_analysis_OLS(di_cfg, X_orig, Y_orig, rowIdx)
+function results = di_analysis_OLS(di_cfg, Y_orig, X_orig, rowIdx)
 % Ordinary Least Squares (OLS) implementations of various statistical
 % analyses, including correlations, independent and paired sample t-tests.
 % The OLS implementation allows to group these analyses under a
@@ -91,6 +91,7 @@ function results = di_analysis_OLS(di_cfg, X_orig, Y_orig, rowIdx)
 %   results.observed.df_parametric   [1 x pY]  feature-wise degrees of freedom for pVal_parametric
 %   results.observed.tVal            [1 x pY]  t-statistic, observed data only (descriptive)
 %   results.observed.rVal            [1 x pY]  correlation coefficient, observed data only (descriptive)
+%   results.observed.dVal            [1 x pY]  Cohen's d, observed data only (descriptive)
 %   results.observed.clusters        struct()  empty for feature-level analyses
 %                             struct with .clusterMembership_obs, .clustIDList_obs,
 %                             .metrics_obs for cluster analyses
@@ -118,8 +119,6 @@ function results = di_analysis_OLS(di_cfg, X_orig, Y_orig, rowIdx)
 %
 % Author: Germano Gallicchio (germano.gallicchio@gmail.com)
 
-
-% TO DO: the parametric computations can be done in a separate function (at the bottom) and be reused internally
 %% default options 
 
 % ranked
@@ -156,6 +155,12 @@ m = size(Y_orig, 1);
 % flags controlling what gets computed (if just betas or also se/df/t/r)
 needPVal    = ~strcmp(analysisType, 'empiricalFeature_inferenceFeature');
 needCluster = strcmp(analysisType, 'parametricFeature_inferenceCluster');
+
+% sanity check: if we need cluster-based inference, we definitely also need parametric pvalues
+if needCluster && ~needPVal
+    error('Cluster-based inference requires parametric p-values, but analysisType is set to one that does not compute them. Please check your di_cfg.analysis.type setting.');
+end
+
 
 %% sanity checks
 
@@ -202,6 +207,13 @@ if needCluster
     if ~isfield(di_cfg.analysis, 'clusterParams')
         error('clusterParams must be defined for parametricFeature_inferenceCluster');
     end
+end
+
+% Subject centering is intentionally not supported in OLS.
+% Repeated-measures effects are handled via subject fixed-effects dummies.
+if isfield(di_cfg.analysis, 'subjectCentering') && strcmp(di_cfg.analysis.subjectCentering, 'center')
+    error(['di_analysis_OLS: subjectCentering=''center'' is not supported for OLS. ' ...
+        'OLS handles subject effects via subject dummies (fixed effects), not by subject-centering X.']);
 end
 
 % options consistency warnings
@@ -301,58 +313,23 @@ for itIdx = 1:nIterations
 
     % --- parametric p-values (only for parametric analysis types) ---
     if needPVal
-        keyboard % double check this
-        % TO DO: convert the code below to a function at the bottom that can be reused in the two parts // easier for maintenance and tidier
-        if isequal(designCode, [0 1]) && strcmp(varianceType, 'unequal')
-            % MODE: Independent groups, unequal variances (Welch).
-            % Uses group-specific variance and feature-wise Satterthwaite df.
-            % Group masks are computed from the current X (permuted in H0 runs).
-            condVals = unique(X);
-            mask1 = (X == max(condVals));
-            mask0 = (X == min(condVals));
-            n1    = sum(mask1);
-            n0    = sum(mask0);
-            % Step 1: build variance ingredients per feature (group-wise variances).
-            s1sq  = var(Y_fit(mask1, :));        % [1 x pY]
-            s0sq  = var(Y_fit(mask0, :));        % [1 x pY]
-            % Step 2: compute coefficient SE from those variance ingredients.
-            SE_W  = sqrt(s1sq / n1 + s0sq / n0); % [1 x pY]
-            % Step 3: compute t-statistic for each feature.
-            tStat = statVal ./ SE_W;
-            % Step 4: compute degrees of freedom (Satterthwaite, feature-wise).
-            num_df  = (s1sq / n1 + s0sq / n0) .^ 2;
-            den_df  = (s1sq / n1) .^ 2 / (n1 - 1) + (s0sq / n0) .^ 2 / (n0 - 1);
-            df_satt = num_df ./ den_df;           % [1 x pY]
-            % Step 5: compute two-tailed p-values from t and df.
-            pVal    = 2 * tcdf(-abs(tStat), df_satt);
-            df_iter = df_satt;
-
-        else
-            % MODE: Classical OLS residual-variance t-test.
-            % Used for equal-variance groups, paired design, and correlation design.
-            % Degrees of freedom are model residual df from the design matrix rank.
-            % Step 1: build variance ingredients per feature (RSS from residuals).
-            E       = Y_fit - X_fit_augmented * beta;                          % [m x pY] residuals
-            RSS     = sum(E .^ 2, 1);                            % [1 x pY]
-            % Step 2: compute coefficient SE from those variance ingredients.
-            df_resid = m - rank(X_fit_augmented);                              % scalar, robust to collinearity
-            sigma2  = RSS / df_resid;                            % [1 x pY]
-            DtD_inv = inv(X_fit_augmented' * X_fit_augmented);                               % [nPred x nPred]
-            SE      = sqrt(sigma2 * DtD_inv(predictor_colIdx, predictor_colIdx)); % [1 x pY]
-            % Step 3: compute t-statistic for each feature.
-            tStat   = statVal ./ SE;                             % [1 x pY]
-            % Step 4: compute degrees of freedom (residual df, shared across features).
-            % Step 5: compute two-tailed p-values from t and df.
-            pVal    = 2 * tcdf(-abs(tStat), df_resid);           % [1 x pY]
-            df_iter = repmat(df_resid, 1, pY);
-        end
+        % compute parametric stats 
+        % based on classical OLS or Welch approach
+        [tStat, pVal, df_iter] = di_computeParametricStats( ...
+            designCode, varianceType, Y_fit, X_fit_augmented, beta, predictor_colIdx, pY);
 
     end
 
     % --- cluster forming (inferenceCluster branch only) ---
     if needCluster
-        keyboard % double check this
-        [clusterMembership, clustIDList, metrics] = di_clusterForming(di_cfg, statVal, pVal);
+        if designCode(1)==0 && designCode(2)==0
+            % beta for the current predictor (statVal) is already a correlation for [0 0] and standardize==true
+            % otherwise (standardize==false) it's a slope, but still the best metric.
+            clusterMetric = statVal; 
+        else
+            clusterMetric = tStat;
+        end
+        [clusterMembership, clustIDList, metrics] = di_clusterForming(di_cfg, clusterMetric, pVal);
     end
 
     % --- store observed (first iteration = identity permutation / original data) ---
@@ -371,42 +348,10 @@ for itIdx = 1:nIterations
             df_parametric_obs   = df_iter;
             tStat_obs           = tStat;  % already computed in the needPVal block above
         else
-            % empirical branch: one-time SE computation for descriptive tVal
-            if isequal(designCode, [0 1]) && strcmp(varianceType, 'unequal')
-                % MODE: Observed-data Welch branch (unequal variances).
-                % Uses original (unshuffled) group membership at itIdx==1.
-                condVals_obs = unique(X);
-                mask1_obs    = (X == max(condVals_obs));
-                mask0_obs    = (X == min(condVals_obs));
-                n1_obs       = sum(mask1_obs);
-                n0_obs       = sum(mask0_obs);
-                % Step 1: build variance ingredients per feature (group-wise variances).
-                s1sq_obs     = var(Y_fit(mask1_obs, :));                    % [1 x pY]
-                s0sq_obs     = var(Y_fit(mask0_obs, :));                    % [1 x pY]
-                % Step 2: compute coefficient SE from those variance ingredients.
-                SE_obs       = sqrt(s1sq_obs / n1_obs + s0sq_obs / n0_obs); % [1 x pY]
-                % Step 4: compute degrees of freedom (Satterthwaite, feature-wise).
-                num_df_obs   = (s1sq_obs / n1_obs + s0sq_obs / n0_obs) .^ 2;
-                den_df_obs   = (s1sq_obs / n1_obs) .^ 2 / (n1_obs - 1) + (s0sq_obs / n0_obs) .^ 2 / (n0_obs - 1);
-                df_parametric_obs = num_df_obs ./ den_df_obs;
-            else
-                % MODE: Observed-data classical OLS residual-variance branch.
-                % Applies to equal-variance groups, paired design, and correlation design.
-                % Step 1: build variance ingredients per feature (RSS from residuals).
-                E_obs        = Y_fit - X_fit_augmented * beta;                              % [m x pY]
-                RSS_obs      = sum(E_obs .^ 2, 1);                            % [1 x pY]
-                % Step 2: compute coefficient SE from those variance ingredients.
-                df_resid_obs = m - rank(X_fit_augmented);                                   % scalar, robust to collinearity
-                sigma2_obs   = RSS_obs / df_resid_obs;                        % [1 x pY]
-                DtD_inv_obs  = inv(X_fit_augmented' * X_fit_augmented);                                   % [nPred x nPred]
-                SE_obs       = sqrt(sigma2_obs * DtD_inv_obs(predictor_colIdx, predictor_colIdx)); % [1 x pY]
-                % Step 4: compute degrees of freedom (residual df, shared across features).
-                df_parametric_obs = repmat(df_resid_obs, 1, pY);
-            end
-            % Step 3: compute t-statistic for each feature.
-            tStat_obs = statVal ./ SE_obs;  % [1 x pY]
-            % Step 5: compute two-tailed p-values from t and df.
-            pVal_parametric_obs = 2 * tcdf(-abs(tStat_obs), df_parametric_obs);
+            % compute parametric stats (only for iteration 1)
+            % based on classical OLS or Welch approach
+            [tStat_obs, pVal_parametric_obs, df_parametric_obs] = di_computeParametricStats( ...
+                designCode, varianceType, Y_fit, X_fit_augmented, beta, predictor_colIdx, pY);
         end
 
         % --- rVal_obs: Pearson r or Spearman rho via OLS on z-scored inputs (descriptive) ---
@@ -422,6 +367,18 @@ for itIdx = 1:nIterations
         D_std    = [ones(m, 1), X_fit_z, subjectDummies];                % design matrix with z-scored predictor
         beta_std = D_std \ Y_fit_z;                                      % [nPred x pY]
         rVal_obs = beta_std(predictor_colIdx, :);                           % [1 x pY]
+
+        % --- dVal_obs: Cohen's d from observed raw data only (descriptive) ---
+        % [0 1] -> pooled-SD Cohen's d (independent groups)
+        % [1 0] -> Cohen's dz based on subject-level condition differences
+        if isequal(designCode, [0 1])
+            dVal_obs = di_computeCohensD_between(Y, X);
+        elseif isequal(designCode, [1 0])
+            obsID_for_d = di_cfg.analysis.dataStruct.observationID(rowIdx(:, itIdx));
+            dVal_obs = di_computeCohensDz_within(Y, X, obsID_for_d);
+        else
+            dVal_obs = nan(1, pY);
+        end
 
         if needCluster
             clusterMembership_obs = clusterMembership;
@@ -474,6 +431,7 @@ results.observed.df_parametric   = df_parametric_obs;    % [1 x pY] parametric d
 % descriptive statistics for observed data only (not stored in null distribution)
 results.observed.tVal = tStat_obs;   % [1 x pY] t-statistic
 results.observed.rVal = rVal_obs;    % [1 x pY] Pearson r or Spearman rho (standardized OLS)
+results.observed.dVal = dVal_obs;    % [1 x pY] Cohen's d (pooled for [0 1], dz for [1 0])
 
 % observed, cluster level
 if needCluster
@@ -513,6 +471,9 @@ end
 if size(results.observed.rVal, 2) ~= pY
     error('observed.rVal does not have pY columns');
 end
+if size(results.observed.dVal, 2) ~= pY
+    error('observed.dVal does not have pY columns');
+end
 
 if needCluster
     if size(results.observed.clusters.clusterMembership_obs, 2) ~= pY
@@ -551,5 +512,172 @@ end
 if all(isnan(results.observed.statVal))
     warning('Diagonale: observed.statVal is all NaN - possible computation failure');
 end
+
+end
+
+function dVal = di_computeCohensD_between(Y, X)
+% Cohen's d for independent groups using pooled SD.
+% TO DO: in future, condider computing a Welch compatible version of Cohen's d that does not assume equal variance between groups
+groupVals = unique(X);
+if numel(groupVals) ~= 2
+    error('Cohen''s d (between) requires exactly two group levels in X.');
+end
+mask1 = (X == max(groupVals));
+mask0 = (X == min(groupVals));
+n1 = sum(mask1);
+n0 = sum(mask0);
+if n1 <= 1 || n0 <= 1
+    error('Cohen''s d (between) requires at least two observations in each group.');
+end
+
+mu1 = mean(Y(mask1, :), 1);
+mu0 = mean(Y(mask0, :), 1);
+s1sq = var(Y(mask1, :), 0, 1);
+s0sq = var(Y(mask0, :), 0, 1);
+sp = sqrt(((n1 - 1) * s1sq + (n0 - 1) * s0sq) / (n1 + n0 - 2));
+
+dVal = (mu1 - mu0) ./ sp;
+dVal(sp == 0) = NaN;
+end
+
+function dVal = di_computeCohensDz_within(Y, X, obsID)
+% Cohen's dz for paired/repeated design: mean(subject differences) / SD(subject differences).
+condVals = unique(X);
+if numel(condVals) ~= 2
+    error('Cohen''s dz (within) requires exactly two condition levels in X.');
+end
+
+condHi = max(condVals);
+condLo = min(condVals);
+uniqueObs = unique(obsID, 'stable');
+nObs = numel(uniqueObs);
+
+D = nan(nObs, size(Y, 2));
+for obsIdx = 1:nObs
+    id = uniqueObs(obsIdx);
+    maskHi = (obsID == id) & (X == condHi);
+    maskLo = (obsID == id) & (X == condLo);
+    if ~any(maskHi) || ~any(maskLo)
+        continue
+    end
+    yHi = mean(Y(maskHi, :), 1);
+    yLo = mean(Y(maskLo, :), 1);
+    D(obsIdx, :) = yHi - yLo;
+end
+
+validRows = all(~isnan(D), 2);
+D = D(validRows, :);
+if size(D, 1) <= 1
+    error('Cohen''s dz (within) requires at least two complete paired observations.');
+end
+
+muD = mean(D, 1);
+sdD = std(D, 0, 1);
+dVal = muD ./ sdD;
+dVal(sdD == 0) = NaN;
+end
+
+function [tStat, pVal, df_vec] = di_computeParametricStats( ...
+    designCode, varianceType, Y_fit, X_fit_augmented, beta, predictor_colIdx, pY)
+% Local function to keep the code above a bit tidier (since this function is used twice)
+% Compute t, p, and df for OLS predictor coefficients.
+%
+% MODE 1 (Welch): design [0 1] with varianceType='unequal'.
+% MODE 2 (Classical OLS): all other supported designs.
+
+if isequal(designCode, [0 1]) && strcmp(varianceType, 'unequal')
+    modeIdx = 1;
+else
+    modeIdx = 2;
+end
+
+b = beta(predictor_colIdx, :);
+
+switch modeIdx
+    case 1
+    
+    % here we assume X has only two-level group codes, so we can estimate
+    % the SE for the coefficient of the only predictor (groups) directly, without needing to compute the full covariance matrix as in classical OLS (as in mode 2, where we are not assuming one two-level predictor only).
+    % Use the actual predictor column from the fitted design matrix (e.g., in case it gets standardized).
+    predictorVals = X_fit_augmented(:, predictor_colIdx);
+    % the OLS slope is the mean difference divided by the spacing
+    % between the two predictor levels, the Welch SE must use that same spacing.
+    groupVals = unique(predictorVals);
+    mask1 = (predictorVals == max(groupVals));
+    mask0 = (predictorVals == min(groupVals));
+    n1    = sum(mask1);
+    n0    = sum(mask0);
+    % sanity checks for number of observations per group
+    if n1 <= 1 || n0 <= 1
+        error('Welch mode requires at least two observations in each group.');
+    end
+    % Compyte spacing between the two predictor levels used in the model.
+    codeSpacing = abs(max(groupVals) - min(groupVals));
+    if codeSpacing == 0
+        error('Welch mode requires two distinct predictor levels.');
+    end
+    s1sq  = var(Y_fit(mask1, :), 0); % use n-1 in denominator for sample variance (unbiased estimator), as per Welch's method
+    s0sq  = var(Y_fit(mask0, :), 0); 
+    SE = sqrt(s1sq/n1 + s0sq/n0) / codeSpacing; % Welch SE for the OLS slope, per feature
+
+    % Step 2: compute t-statistic for each feature.
+    tStat = b ./ SE;
+
+    % Step 3: compute degrees of freedom (Satterthwaite, feature-wise).
+    num_df = (s1sq / n1 + s0sq / n0) .^ 2;
+    den_df = (s1sq / n1) .^ 2 / (n1 - 1) + (s0sq / n0) .^ 2 / (n0 - 1);
+    df_vec = num_df ./ den_df;
+
+
+case 2
+    
+    % while in this case we are assuming equal variances across levels, we are also being more general and allowing multiple predictors
+    % (e.g., subject dummies in the repeated measure design), so we need an approach that generalized to any predictor, differently from mode 1.
+    % such general approach would be headache for mode 1. but mode 1 is restricted to one predictor with two-levels.
+
+    % e.g., p 158 of Fox (2009) A mathematical primer for social statistics
+    % e.g., p.134 of Kutner et al. (2004) Applied Linear Statistical Models, Ed. 5 
+
+    % Step 1: compute sigma squared (residual variance) from the fitted model, per each feature of Y_fit.
+    E       = Y_fit - X_fit_augmented * beta; % residuals (per feature) = difference between the original data and predicted (beta based linear combination of predictors)
+    RSS     = sum(E .^ 2, 1); % residual sum of squares (per feature)
+    % residuals degrees of freedom = n-(k+1), where
+    % n = number of observations
+    n = size(X_fit_augmented, 1);
+    % k + 1 = number of linearly independent parameters in the design matrix,
+    % including the intercept. Using rank() is more robust than counting
+    % columns size(X_fit_augmented,2) because it handles collinearity.
+    kPlus1 = rank(X_fit_augmented);
+    df_resid = n - kPlus1;
+    % sanity check on df_resid to avoid division by zero or negative df
+    if df_resid <= 0
+        error('Residual degrees of freedom is zero or negative. Check design matrix for full rank and ensure n > k+1.');
+    end
+    % residual variance (unbiased estimate) (feature-wise):
+    sigma2  = RSS / df_resid;
+
+    % Step 2: compute SE for the predictor coefficient 
+    % using  sigma2 and the design matrix X_fit_augmented.
+    % covariance matrix for a single feature and for beta_hat would be: sigma2 * (X'X)^(-1)
+    % the standard errors for the regression coefficients would be the squared roots of the diagonal entries of the covariance matrix:
+    % but in this case, sigma2 can be a vector (per feature of Y), so 
+    % let's compute the inverse of X'X first (as that is dependent only on X and not Y)
+    % then let's use only the diagonal entry corresponding to that predictor,
+    % and then multiply by sigma2 (which is per feature) to get the SE associated to that predictor for each Y feature.
+    XtX_inv = inv(X_fit_augmented' * X_fit_augmented); % [nPred x nPred]
+    XtX_inv_jj = XtX_inv(predictor_colIdx, predictor_colIdx); % the j,j entry of XtX_inv corresponding to the predictor coefficient (a scalar)
+    SE = sqrt(sigma2 * XtX_inv_jj); % SE for the predictor coefficient, per feature (1 x pY)
+    
+    % Step 3: compute t-statistic for each feature.
+    tStat = b ./ SE; % technically, it is beta_hat minus the null value (zero here), divided by SE
+
+    % Step 4: collate degrees of freedom for all features into a vector 
+    % (same df for all features in classical OLS, so just repeat the same value)
+    df_vec = repmat(df_resid, 1, pY);
+
+end
+
+% compute two-tailed p-values using t and df.
+pVal = 2 * tcdf(-abs(tStat), df_vec); % 1 x pY
 
 end
