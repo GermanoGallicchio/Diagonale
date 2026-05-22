@@ -19,7 +19,6 @@ function results = di_modeReport(di_cfg, results)
 %   pVal_maxT                 - maxT p-values per metric when results.inference.cluster is present
 %   pVal_emp                  - empirical p-values (specific for each mode) for sequential evaluation only
 %
-%
 % AUTHOR: Germano Gallicchio (germano.gallicchio@gmail.com)
 
 %% sanity checks
