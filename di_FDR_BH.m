@@ -11,10 +11,12 @@ function pAdj = di_FDR_BH(p)
 %   - NaN values are preserved as NaN.
 %   - Valid p-values are expected in [0,1].
 %
+% note: alternative to the mafdr in Bioinformatics toolbox but with a much smaller scope (this only does BH procedure)
+%
 % Author: Germano Gallicchio (germano.gallicchio@gmail.com)
 
 if ~isvector(p)
-    error('di_FDR_BH:InputNotVector', 'Input p must be a vector.');
+    error('\\ di_FDR_BH: InputNotVector Input p must be a vector.');
 end
 
 pAdj = nan(size(p));
@@ -28,7 +30,7 @@ end
 pValid = p(validMask);
 
 if any(pValid < 0 | pValid > 1)
-    error('di_FDR_BH:InputOutOfRange', 'Valid p-values must be in the interval [0,1].');
+    error('\\ di_FDR_BH: InputOutOfRange Valid p-values must be in the interval [0,1].');
 end
 
 m = numel(pValid);
