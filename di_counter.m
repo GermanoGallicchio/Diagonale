@@ -27,7 +27,7 @@ function di_counter(counter,total)
 
         % display message
         if counter==1
-            fprintf(['counting (of ' num2str(total) ' total): '])
+            fprintf(['\\ counting (of ' num2str(total) ' total): '])
         end
 
         % start counting
