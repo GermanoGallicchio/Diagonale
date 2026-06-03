@@ -86,13 +86,17 @@ switch di_cfg.analysis.type
         end
         
         modes = results.simulated.permutationH0.modes;
+        % sanity check we have the required fields
+        if ~isfield(modes, 's') || ~isfield(modes, 'wilk')
+            error('PLS_SVD: missing required permutation mode fields (s and/or wilk)')
+        end
         
         % Create metrics struct array from ALL iterations (observed + permutations)
         metrics = repmat(struct('s', [], 'wilk', []), 1, nIterations);
         
         for itIdx = 1:nIterations
-            if isfield(modes, 's');          metrics(1,itIdx).s          = modes.s(itIdx, :); end
-            if isfield(modes, 'wilk');       metrics(1,itIdx).wilk       = modes.wilk(itIdx, :); end
+            metrics(1,itIdx).s    = modes.s(itIdx, :);
+            metrics(1,itIdx).wilk = modes.wilk(itIdx, :);
         end
 
     case {'AJIVE'}
