@@ -4,7 +4,7 @@ function results = di_modeReport(di_cfg, results)
 % INPUT:
 %   di_cfg   - validated analysis configuration
 %   results  - struct with 
-%                 .PLS_SVD.modes with s_obs, p_obs, r_obs, nModes
+%                 .PLS_SVD.modes with s, p, r, nModes
 %                 .inference.mode with pVal_maxT (for permutation testing)
 %                 .simulated.permutationH0.modes with s for null comparison
 %
@@ -31,29 +31,32 @@ if ~isfield(results.PLS_SVD, 'modes')
     error('results.PLS_SVD must contain .modes');
 end
 
-if ~isfield(results.PLS_SVD.modes, 's_obs')
-    error('results.PLS_SVD.modes must contain .s_obs (singular values)');
+if ~isfield(results.PLS_SVD.modes, 's')
+    error('results.PLS_SVD.modes must contain .s (singular values)');
 end
 
-if ~isfield(results.PLS_SVD.modes, 'p_obs')
-    error('results.PLS_SVD.modes must contain .p_obs (proportion variance explained)');
+if ~isfield(results.PLS_SVD.modes, 'p')
+    error('results.PLS_SVD.modes must contain .p (proportion variance explained)');
 end
 
-if ~isfield(results.PLS_SVD.modes, 'r_obs')
-    error('results.PLS_SVD.modes must contain .r_obs (XY correlations)');
+if ~isfield(results.PLS_SVD.modes, 'r')
+    error('results.PLS_SVD.modes must contain .r (XY correlations)');
 end
 
 if ~isfield(results.PLS_SVD.modes, 'nModes')
     error('results.PLS_SVD.modes must contain .nModes');
 end
+if ~isfield(results, 'inference') || ~isfield(results.inference, 'mode') || ~isfield(results.inference.mode, 'pVal_emp')
+    error('results.inference.mode must contain .pVal_emp');
+end
 
 %% shortcuts
 
 nModes = results.PLS_SVD.modes.nModes;
-s_obs = results.PLS_SVD.modes.s_obs;  % singular values: [1 x nModes]
-p_obs = results.PLS_SVD.modes.p_obs;  % proportion variance: [1 x nModes]
+s_obs = results.PLS_SVD.modes.s;  % singular values: [1 x nModes]
+p_obs = results.PLS_SVD.modes.p;  % proportion variance: [1 x nModes]
 p_obs_cumsum = cumsum(p_obs);
-r_obs = results.PLS_SVD.modes.r_obs;  % XY correlations: [1 x nModes]
+r_obs = results.PLS_SVD.modes.r;  % XY correlations: [1 x nModes]
 pVal_s_maxT = results.inference.mode.pVal_maxT.s;
 pVal_s_emp = results.inference.mode.pVal_emp.s;
 pVal_wilk_maxT = results.inference.mode.pVal_maxT.wilk;
