@@ -225,10 +225,9 @@ switch key
         % - Per each mode, compares observed SV-based metrics against their null distributions
         % - Applies maxT correction across modes for multiple metrics:
         %   * singular values (s): covariance captured by each mode
-        %   * total inertia: sum of all singular values
         %   * Wilks lambda: cumulative variance (from end)
-        %   * sequential variance: cumulative variance (from start)
         % - maxT controls FWER across modes within each metric
+        % - sequential variance is handled in empirical p-values only
         
         % Compute uncorrected empirical p-values per mode
         % Each mode compared against its own null distribution
