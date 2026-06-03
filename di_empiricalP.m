@@ -136,12 +136,12 @@ keyboard % for debugging  // this path is not yet validated -- in fact I don't s
         modes_null = results.simulated.permutationH0.modes;
         nModes = modes_obs.nModes;
 
-        % Only singular values are used for confirmatory sequential mode inference.
-        if ~isfield(modes_null, 's') || ~isfield(modes_obs, 's_obs')
-            error('PLS_SVD: missing singular value fields (modes.s and/or modes.s_obs)')
+        % Singular values are the primary confirmatory metric.
+        if ~isfield(modes_null, 's') || ~isfield(modes_obs, 's')
+            error('PLS_SVD: missing singular value fields (modes.s and/or observed modes.s)')
         end
 
-        obsVals = modes_obs.s_obs;      % (1 x nModes)
+        obsVals = modes_obs.s;      % (1 x nModes)
         nullVals = modes_null.s;        % (nIterations x nModes)
 
         % compute empirical p-values per mode for singular values
@@ -155,7 +155,7 @@ keyboard % for debugging  // this path is not yet validated -- in fact I don't s
             pVals(modeIdx) = sum(abs(nullVals(:, modeIdx)) >= abs(obsVals(modeIdx))) / nIterations;
         end
         pVal_emp.s = pVals;
-        
+
         results.inference.mode.pVal_emp = pVal_emp;
         
     case {'AJIVE'}
@@ -178,7 +178,7 @@ if strcmpi(di_cfg.analysis.type, 'PLS_SVD') && di_cfg.analysis.figFlag && nItera
     modes_obs = results.PLS_SVD.modes;
     modes_null = results.simulated.permutationH0.modes;
     nModes = modes_obs.nModes;
-    metrics_lbl = fieldnames(pVal_emp);
+    metrics_lbl = {'s'};
 
     % Cap the number of modes displayed per metric
     capModes = 3;  % maximum modes to show in figure
@@ -196,8 +196,7 @@ if strcmpi(di_cfg.analysis.type, 'PLS_SVD') && di_cfg.analysis.figFlag && nItera
         metricName = metrics_lbl{metIdx};
 
         % Get observed and null values
-        obsName = [metricName '_obs'];
-        obsVals = modes_obs.(obsName);  % (1 x nModes)
+        obsVals = modes_obs.(metricName);  % (1 x nModes)
         nullVals = modes_null.(metricName);  % (nIterations x nModes)
 
         % Shared x-axis range across modes (based on shown modes only)
