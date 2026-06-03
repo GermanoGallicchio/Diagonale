@@ -1,114 +1,122 @@
-function pe_z3Plot(coord_3d, z3Values, params)
+function di_sphericalPlot(di_cfg, sphValues, params)
+% Plot spherical data projected to 2D
+% Inputs:
+%   di_cfg - configuration struct with validated dimensions containing spherical coordinates
+%   sphValues - (1 x nChan) values to categorize channels: 
+%       1=seed channel
+%       2=a neighbor
+%       0=not a neighbor
+%
+%   params - struct with optional fields:
+%     projectionType, drawLines, lineWidth, lineCol, chanMarkerSize,
+%     chanMarkerChar, chanLbl, colBar, colMap, cLim
 
-% draws a 2D scalp map from 3D data in sensor-space (e.g., channels)
-% 
-%   INPUT:
-%
-%       coord_3d
-%           .sph_theta                spherical theta (like in eeglab EEG.chanlocs structure)
-%           .sph_phi                  spherical phi (like in eeglab EEG.chanlocs structure)
-%
-%       params
-%           .projectionType
-%
-%
-%   OUTPUT: 
-%       Just display the scalp map
-%
-%
-%   Author: Germano Gallicchio (germano.gallicchio@gmail.com)
 
-%% shortcuts
+% Extract dimension metadata
+dimKeys = fieldnames(di_cfg.dimensions);
+dimTypes = cellfun(@(k) di_cfg.dimensions.(k).type, dimKeys, 'UniformOutput', false);
 
-nChan = size(coord_3d,2);
+% Find spherical dimension
+sphIdx = find(strcmp(dimTypes, 'spherical'));
+if isempty(sphIdx)
+    error('\\ di_sphericalDistance requires a spherical dimension in di_cfg.dimensions');
+end
+if length(sphIdx) > 1
+    warning('\\ Multiple spherical dimensions found. Using the first one: %s', dimKeys{sphIdx(1)});
+end
+
+% Extract spherical coordinates and labels
+sphKey = dimKeys{sphIdx(1)};
+sphCoord = di_cfg.dimensions.(sphKey).coord;
+nChan = di_cfg.dimensions.(sphKey).num;
+
+% Build coord_sph struct for projection
+coord_sph = repmat(struct('sph_theta', [], 'sph_phi', [], 'labels', ''), nChan, 1);
+for chanIdx = 1:nChan
+    coord_sph(chanIdx).sph_theta = sphCoord.sphTheta(chanIdx);
+    coord_sph(chanIdx).sph_phi   = sphCoord.sphPhi(chanIdx);
+    if isfield(sphCoord, 'labels')
+        coord_sph(chanIdx).labels = sphCoord.labels{chanIdx};
+    else
+        coord_sph(chanIdx).labels = sprintf('Chan%d', chanIdx);
+    end
+end
 fieldNames = fieldnames(params);
 
 if any(strcmp(fieldNames,'projectionType'))
     projectionType = params.projectionType;
 else
-    projectionType = 'azimuthalEquidistant'; % default
+    projectionType = 'azimuthalEquidistant';
 end
-
 
 if any(strcmp(fieldNames,'drawLines'))
     drawLines = params.drawLines;
 else
-    drawLines = true; % default
+    drawLines = true;
 end
 
 if any(strcmp(fieldNames,'lineWidth'))
     lineWidth = params.lineWidth;
 else
-    lineWidth = 1; % default
+    lineWidth = 1;
 end
 
 if any(strcmp(fieldNames,'lineCol'))
     lineCol = params.lineCol;
 else
-    lineCol = [0 0 0 1]; % default
+    lineCol = [0 0 0 1];
 end
-
 
 if any(strcmp(fieldNames,'chanMarkerSize'))
     chanMarkerSize  = params.chanMarkerSize;
 else
-    chanMarkerSize = 5; % default
+    chanMarkerSize = 5;
 end
-
 
 if any(strcmp(fieldNames,'chanMarkerChar'))
     chanMarkerChar = params.chanMarkerChar;
 else
-    chanMarkerChar = 'o'; % default
+    chanMarkerChar = 'o';
 end
-
 
 if any(strcmp(fieldNames,'chanLbl'))
     chanLbl = params.chanLbl;
 else
-    chanLbl = false; % default
+    chanLbl = false;
 end
-
 
 if any(strcmp(fieldNames,'colBar'))
 colBar = params.colBar;
 else
-    colBar = false; % default
+    colBar = false;
 end
-
 
 if any(strcmp(fieldNames,'colMap'))
     colMap = params.colMap;
 else
-    colMap = turbo; % default
+    colMap = turbo;
 end
-
 
 if any(strcmp(fieldNames,'cLim'))
     cLim = params.cLim;
 else
-    cLim = prctile(z3Values,[0 100]); % default
+    cLim = prctile(sphValues, [0 100]);
 end
-
 
 %% reference coordinates
 % for the very top and the very right of the circumference
 % very top = nasion
-% very right = ca. T8
-% include 3d coordinates of nasion and T8 as extra channels
+% include 3d coordinates of nasion as extra channel
 % these coordinates are not associated with data
 % they simply work as reference to scale the units and make the circumference pass by
 
-% nasion 
-coord_3d(nChan+1).sph_theta = 90;
-coord_3d(nChan+1).sph_phi   = 0;
-coord_3d(nChan+1).labels    = 'nasionRef';
-
+% nasion
+coord_sph(nChan+1).sph_theta = 90;
+coord_sph(nChan+1).sph_phi   = 0;
+coord_sph(nChan+1).labels    = 'nasionRef';
 
 %% project electrode 3D locations to 2D
-
-coord_2d = pe_z3Projection(coord_3d, projectionType);
-
+coord_2d = di_sphericalProjection(di_cfg, projectionType);
 
 % scale 2D coordinates based on the top and right reference
 % so that they represent respectively height of 1 and length of 1 
@@ -118,15 +126,14 @@ coord_2d(:,2) = (coord_2d(:,2)-min(coord_2d(:,2)));
 %references length to normalize
 yRef = coord_2d(nChan+1,2);
 xRef = coord_2d(nChan+1,1)*2;
-
-coord_2d(:,1) = coord_2d(:,1) / (xRef-min(coord_2d(:,1)));
-coord_2d(:,2) = coord_2d(:,2) / (yRef-min(coord_2d(:,2)));
+coord_2d(:,1) = coord_2d(:,1) / (xRef - min(coord_2d(:,1)));
+coord_2d(:,2) = coord_2d(:,2) / (yRef - min(coord_2d(:,2)));
 
 %% value normalization for colors
 
-z3Values_norm = (z3Values - cLim(1)) / (cLim(2) - cLim(1));
-idx = round(1 + z3Values_norm * (size(colMap, 1) - 1));
-idx = max(1, min(size(colMap,1), idx)); % clip to colormap range
+sphValues_norm = (sphValues - cLim(1)) / (cLim(2) - cLim(1));
+idx = round(1 + sphValues_norm * (size(colMap, 1) - 1));
+idx = max(1, min(size(colMap, 1), idx));  % clip to colormap range
 
 %% figure
 
@@ -148,17 +155,16 @@ end
 
 % channel labels
 if chanLbl
-    text(coord_2d(1:nChan,1), coord_2d(1:nChan,2),{coord_3d(1:nChan).labels},'VerticalAlignment','middle','HorizontalAlignment','center','FontSize',8)
+    text(coord_2d(1:nChan, 1), coord_2d(1:nChan, 2), {coord_sph(1:nChan).labels}, ...
+        'VerticalAlignment', 'middle', 'HorizontalAlignment', 'center', 'FontSize', 8)
 end
 
-
-% colorbar
+% color bar
 if colBar
     cb = colorbar;
     cb.Ticks = [0 1];
     cb.TickLabels = [ cLim ];
 end
-
 
 % anatomical lines 
 
@@ -188,8 +194,6 @@ if drawLines
     uistack(rnln,"bottom")
 
 end
-
-
 
 
 ax = gca;
