@@ -45,7 +45,7 @@ function results = di_inference(di_cfg,results)
 %                       .loadings       (for PLS_SVD) bootstrap loading samples
 %                 .PLS_SVD            (for PLS_SVD analyses only)
 %                   .loadings.U_obs, .V_obs, .YU_obs, .XV_obs
-%                   .modes.s_obs, .p_obs, .r_obs, .nModes
+%                   .modes.s, .p, .r, .nModes
 %
 % OUTPUT:
 %   results     - same as input but augmented with inference fields:
