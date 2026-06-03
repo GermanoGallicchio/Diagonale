@@ -93,9 +93,6 @@ switch di_cfg.analysis.type
         for itIdx = 1:nIterations
             if isfield(modes, 's');          metrics(1,itIdx).s          = modes.s(itIdx, :); end
             if isfield(modes, 'wilk');       metrics(1,itIdx).wilk       = modes.wilk(itIdx, :); end
-            % TO DO: remove inertia and sequential
-            %if isfield(modes, 'inertia');    metrics(1,itIdx).inertia    = modes.inertia(itIdx, :); end
-            %if isfield(modes, 'sequential'); metrics(1,itIdx).sequential = modes.sequential(itIdx, :); end
         end
 
     case {'AJIVE'}
