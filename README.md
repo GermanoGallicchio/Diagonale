@@ -26,24 +26,18 @@ If hypothesis testing is not the goal, but rather stability of the statistical m
 Diagonale offers a command line interface (i.e., no graphic user interface) to perform these analyses. While scripting is required, the script would consist of preparing the data in a standardized format and making choices about the type of analysis and its parameters, so no actual programming is required.
 
 ## What Diagonale's current version can do
-[X] = Diagonale can do it
-<br>
-[~] = Diagonale can do it with interactive prompts and/or debugging stops in prerelease paths
-<br>
-[ ] = Diagonale cannot _yet_ do it
-<br>
-| analysis &<br>objective | symmetric association between variables | compare groups | compare levels of one repeated-measure factor
-| ---: | :---: | :---: | :---: | 
-| empiricalFeature_inferenceFeature<br>permutation             | [~]<br>(2 variables)     | [X]<br>(2 groups)   | [X]<br>(2 levels) |
-| empiricalFeature_inferenceFeature<br>bootstrap               | [~]<br>(2 variables)     | [~]<br>(2 groups)   | [~]<br>(2 levels) |
-| parametricFeature_inferenceFeature<br>permutation            | [~]<br>(2 variables)     | [~]<br>(2 groups)   | [~]<br>(2 levels) |
-| parametricFeature_inferenceFeature<br>bootstrap              | [ ]<br>(2 variables)     | [ ]<br>(2 groups)   | [ ]<br>(2 levels) |
-| parametricFeature_inferenceCluster<br>permutation            | [~]<br>(2 variables)     | [X]<br>(2 groups)   | [X]<br>(2 levels) |
-| parametricFeature_inferenceCluster<br>bootstrap              | [ ]<br>(2 variables)     | [ ]<br>(2 groups)   | [ ]<br>(2 levels) |
-| PLS_SVD<br>permutation                     | [X]<br>(2 variable sets) | [X]<br>(2+ groups)  | [X]<br>(2+ levels) |
-| PLS_SVD<br>bootstrap                       | [X]<br>(2 variable sets) | [X]<br>(2+ groups)  | [X]<br>(2+ levels) |
 
----
+| objective         | inferenceLevel | supported | 
+| --- | --- | --- |
+| `permutationH0testing` | `feature` | yes | 
+| `permutationH0testing` | `cluster` | yes | 
+| `permutationH0testing` | `latent`  | yes | 
+| `bootstrapStability`   | `feature` | yes |
+| `bootstrapStability`   | `cluster` | no  |
+| `bootstrapStability`   | `latent`  | yes |
+
+## Documentation
+Documentation for Diagonale is in preparation and will be available at this [link](https://germanogallicchio.github.io/Diagonale_documentation/index.html)
 
 ## Installation
 An how to install guide will be hosted in the Documentation page. But in short, for now, installation is manual and simple:
@@ -53,10 +47,7 @@ An how to install guide will be hosted in the Documentation page. But in short, 
 ## Tutorials
 Tutorials are in preparation and will be hosted in the Documentation page. 
 
-## Documentation
-Documentation for Diagonale is in preparation and will be available at this [link](https://germanogallicchio.github.io/Diagonale_documentation/index.html)
-
-
+---
 
 ## Wish list (maybe future updates)
 - cross validation for generalizability evaluation (high priority, highest effort). 
