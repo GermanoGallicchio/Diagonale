@@ -23,7 +23,7 @@ Testing effects on datasets with many and correlated variables (i.e., multivaria
 
 If hypothesis testing is not the goal, but rather stability of the statistical metric across sampling variability, the bootstrap framework provides such metrics.
 
-Diagonale offers a command line interface (i.e., no graphic user interface) to perform these analyses. While scripting is required, the script would consist of preparing the data in a standardized format and making choices about the type of analysis and its parameters, so actual programming is required.
+Diagonale offers a command line interface (i.e., no graphic user interface) to perform these analyses. While scripting is required, the script would consist of preparing the data in a standardized format and making choices about the type of analysis and its parameters, so no actual programming is required.
 
 ## What Diagonale's current version can do
 [X] = Diagonale can do it
