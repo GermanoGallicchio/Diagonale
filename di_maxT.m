@@ -13,7 +13,8 @@ function results = di_maxT(di_cfg,results)
 %
 % INPUT:
 %   di_cfg  - configuration with:
-%             .analysis.type (supported: parametricFeature_inferenceFeature,
+%             .analysis.type (supported: empiricalFeature_inferenceFeature,
+%                              parametricFeature_inferenceFeature,
 %                              parametricFeature_inferenceCluster, PLS_SVD)
 %             .analysis.nIterations and .analysis.p_crit
 %   results - contains permutation null values for the selected analysis type:
@@ -26,8 +27,12 @@ function results = di_maxT(di_cfg,results)
 %             .inference.feature.*
 %             .inference.cluster.*
 %             .inference.mode.*
-%             .pVal_maxT.(metric_name) - maxT p-value per feature/cluster/mode
-%             .thresholds.(metric_name) - significance threshold
+%             Feature level stores canonical outputs in:
+%               .feature.pVal_corr
+%               .feature.thresholds.*
+%             Cluster/mode levels store metric-specific outputs in:
+%               .pVal_maxT.(metric_name)
+%               .thresholds.(metric_name)
 %
 % the metrics depend on the analysis type and are detected from the results structure.
 % Clusters
@@ -52,19 +57,27 @@ nIterations = di_cfg.analysis.nIterations;
 p_crit = di_cfg.analysis.p_crit;
 
 
-switch di_cfg.analysis.type
-    case {'empiricalFeature_inferenceFeature'}
-        error('\\ not coded')
+inferenceLevel = di_cfg.analysis.inferenceLevel;
 
-    case {'empiricalFeature_inferenceCluster'}
-        error('\\ not coded')
-
-    case {'parametricFeature_inferenceFeature'}
+switch inferenceLevel
+    case 'feature'
         % Feature-level maxT: build metrics from permutation null of feature stats
         if ~isfield(results, 'simulated') || ~isfield(results.simulated, 'permutationH0') || ~isfield(results.simulated.permutationH0, 'statVal')
-            error('\\ parametricFeature_inferenceFeature: missing results.simulated.permutationH0.statVal')
+            error('\\ feature-level maxT: missing results.simulated.permutationH0.statVal')
         end
         statVal_null = results.simulated.permutationH0.statVal; % [nIterations x pX]
+        pX = size(statVal_null, 2);
+        if ~isfield(di_cfg.analysis, 'ignore_col')
+            error('\\ feature-level maxT requires di_cfg.analysis.ignore_col')
+        end
+        ignore_col = logical(di_cfg.analysis.ignore_col);
+        if numel(ignore_col) ~= pX
+            error('\\ ignore_col length must match number of feature columns in permutationH0.statVal')
+        end
+        feature_2use = ~ignore_col;
+        if ~any(feature_2use)
+            error('\\ all features are ignored (ignore_col all true)')
+        end
         if size(statVal_null,1) ~= nIterations
             error('\\ statVal null rows must equal nIterations')
         end
@@ -73,12 +86,12 @@ switch di_cfg.analysis.type
             metrics(1,itIdx).statVal = statVal_null(itIdx, :);
         end
 
-    case {'parametricFeature_inferenceCluster'}
+    case 'cluster'
         
         % cluster metrics available (mass, size, extremeVal, etc.)
         metrics = results.simulated.permutationH0.clusterMetrics;  % [1 x nIterations] struct array
 
-    case {'PLS_SVD'}
+    case 'latent'
         % Build metrics struct array from mode-level permutation distribution
         % Structure: results.simulated.permutationH0.modes.s (nIterations x nModes)
         if ~isfield(results, 'simulated') || ~isfield(results.simulated, 'permutationH0') || ~isfield(results.simulated.permutationH0, 'modes')
@@ -98,9 +111,6 @@ switch di_cfg.analysis.type
             metrics(1,itIdx).s    = modes.s(itIdx, :);
             metrics(1,itIdx).wilk = modes.wilk(itIdx, :);
         end
-
-    case {'AJIVE'}
-        keyboard; % TO DO
 
     otherwise
         error('not yet coded')
@@ -123,6 +133,16 @@ for metIdx = 1:metrics_num
         
         % get all feature/cluster/mode level values for this metric in this iteration
         metricVal = [metrics(1,itIdx).(metrics_lbl{metIdx})];  % e.g., [cluster1_mass, cluster2_mass, ...]
+
+        % For feature-level analyses, enforce ignore_col in maxT family definition.
+% TO DO: add support for di_cfg.analysis.maxT_dimensions (analogous to di_cfg.analysis.FDR_dimensions)
+% so maxT can be applied within user-defined dimension pools instead of as done currently with one global feature family.
+        if strcmp(inferenceLevel, 'feature')
+            metricVal = metricVal(feature_2use);
+        end
+
+        % guard against NaNs in null values (e.g., ignored features from upstream).
+        metricVal = metricVal(~isnan(metricVal));
         
         % find the most extreme value
         [maxVal, maxIdx] = max(abs(metricVal));
@@ -162,20 +182,29 @@ for metIdx = 1:metrics_num
     thresholds.(varLbl) = prctile(H0distribution, 100*(1 - p_crit));
 
     % p-values: proportion of H0 maxima >= each observed |value|
-    pvals = arrayfun(@(v) sum(H0distribution >= abs(v)) / numel(H0distribution), obsVal);
+    if strcmp(inferenceLevel, 'feature')
+        pvals = nan(size(obsVal));
+        obsActive = obsVal(feature_2use);
+        validActive = ~isnan(obsActive);
+        pvalsActive = nan(size(obsActive));
+        pvalsActive(validActive) = arrayfun(@(v) sum(H0distribution >= abs(v)) / numel(H0distribution), obsActive(validActive));
+        pvals(feature_2use) = pvalsActive;
+    else
+        pvals = arrayfun(@(v) sum(H0distribution >= abs(v)) / numel(H0distribution), obsVal);
+    end
     pval_maxT.(varLbl) = pvals;
 end
 
 %% store values
 
-switch di_cfg.analysis.type
-    case {'parametricFeature_inferenceFeature'}
-        results.inference.feature.pVal_maxT = pval_maxT;
+switch inferenceLevel
+    case 'feature'
+        results.inference.feature.pVal_corr = pval_maxT.statVal;
         results.inference.feature.thresholds = thresholds;
-    case {'parametricFeature_inferenceCluster'}
+    case 'cluster'
         results.inference.cluster.pVal_maxT = pval_maxT;
         results.inference.cluster.thresholds = thresholds;
-    case {'PLS_SVD'}
+    case 'latent'
         results.inference.mode.pVal_maxT = pval_maxT;
         results.inference.mode.thresholds = thresholds;
     otherwise
