@@ -30,7 +30,7 @@ function results = di_inference(di_cfg,results)
 %   results     - results structure from di_analyze():
 %                 .observed 
 %                   .statVal            (1 x pX) observed statistics
-%                   .pVal               (1 x pX) p-values (parametric analyses only)
+%                   .pVal_parametric    (1 x pX) parametric p-values (parametric analyses only)
 %                   .clusters           cluster info (cluster-based analyses only)
 %                     .clusterMembership_obs
 %                     .clustIDList_obs
@@ -50,12 +50,11 @@ function results = di_inference(di_cfg,results)
 % OUTPUT:
 %   results     - same as input but augmented with inference fields:
 %       .inference
-%           for permutation, empiricalFeature_inferenceFeature
-%                   .feature.pVal_emp           - empirical pvalue per feature
-%                   .feature.pVal_emp_FDR       - empirical pvalue per feature (FDR corrected)
-%           for permutation, parametricFeature_inferenceFeature
-%                   .feature.pVal_maxT          - pvalue per feature (maxT corrected)
-%                   .feature.thresholds.*       - maxT thresholds per metric
+%           for permutation, *Feature_inferenceFeature
+%                   .feature.pVal_raw           - uncorrected pvalue per feature
+%                   .feature.pVal_corr          - corrected pvalue per feature (selected by analysis.featureMultComp)
+%                   .feature.multComp           - selected correction method ('FDR' or 'maxT')
+%                   .feature.thresholds.*       - maxT thresholds per metric (when selected)
 %           for permutation, parametricFeature_inferenceCluster
 %                   .cluster.pVal_maxT          - pvalue per cluster (maxT corrected)
 %                   .cluster.thresholds.*       - maxT thresholds per metric
@@ -82,13 +81,6 @@ function results = di_inference(di_cfg,results)
 % Author: Germano Gallicchio (germano.gallicchio@gmail.com)
 
 %% shortcuts
-
-% p value for inference (only used by permutation testing paths; not set for bootstrapStability)
-if isfield(di_cfg.analysis, 'p_crit')
-    p_crit = di_cfg.analysis.p_crit;
-else
-    p_crit = [];  % not needed for bootstrap; will error naturally if mistakenly used
-end
 
 % num of iterations
 nIterations = di_cfg.analysis.nIterations;
@@ -134,83 +126,96 @@ end
 if ~isfield(di_cfg.analysis, 'objective')
     error('\\ di_cfg.analysis must have .objective field (permutationH0testing or bootstrapStability)');
 end
-if ~isfield(di_cfg.analysis, 'type')
-    error('\\ di_cfg.analysis must have .type field');
+if ~isfield(di_cfg.analysis, 'inferenceLevel')
+    error('\\ di_cfg.analysis must have .inferenceLevel field');
 end
 
 
 %% implementation
 
-% build key using analysis objective and analysis type 
-key = sprintf('%s + %s', di_cfg.analysis.objective, di_cfg.analysis.type);
+% build key using analysis objective and inference level
+key = sprintf('%s + %s', di_cfg.analysis.objective, di_cfg.analysis.inferenceLevel);
 
 switch key
     
-    case 'permutationH0testing + empiricalFeature_inferenceFeature'
-        % - per each feature, compares observed statistical scores to a null distribution
-        % - derive empirical p-values 
-        % - applies FDR correction across features belonging to chosen dimensions (eg, it could be all, some, or none)
-        % - optional, form clusters for descriptive purposes (done elsewhere, downstream function)
+    case 'permutationH0testing + feature'
+        % Feature-level inference supports both feature-level correction choices:
+        %   - FDR (via analysis.correction = 'FDR')
+        %   - maxT (via analysis.correction = 'maxT')
 
-        % get observed statistics and null distribution from unified structure
-        statVal_obs = results.observed.statVal;  % [1 x pX]
-        null_values = results.simulated.permutationH0.statVal;  % [nIterations x pX]
-        
-        % Compute empirical p-values: fraction of null values as extreme as observed
-        % Obs: minimum p-value granularity is 1/nIterations. So, for p < 0.05, need nIterations >= 20; for p < 0.01, need nIterations >= 100
-        if nIterations < 100
-            warning(['nIterations = ' num2str(nIterations) ' is small; p-value resolution = 1/' num2str(nIterations)]);
+        if ~isfield(di_cfg.analysis, 'testingApproach')
+            error('permutationH0testing + feature requires di_cfg.analysis.testingApproach')
         end
-        
+        if ~isfield(di_cfg.analysis, 'correction')
+            error('permutationH0testing + feature requires di_cfg.analysis.correction')
+        end
 
-        pval_emp = nan(1, size(statVal_obs, 2)); % initialize
-        for colIdx = 1:size(statVal_obs, 2)
-            if di_cfg.analysis.ignore_col(colIdx)
-                continue
+        % 1. uncorrected p-values, depending on analysis type
+        switch di_cfg.analysis.testingApproach
+            case 'empirical'
+                % get observed statistics and null distribution from unified structure
+                statVal_obs = results.observed.statVal;  % [1 x pX]
+                null_values = results.simulated.permutationH0.statVal;  % [nIterations x pX]
+
+                % Compute empirical p-values: fraction of null values as extreme as observed
+                if nIterations < 100
+                    warning(['nIterations = ' num2str(nIterations) ' is small; p-value resolution = 1/' num2str(nIterations)]);
+                end
+
+                pval_raw = nan(1, size(statVal_obs, 2));
+                for colIdx = 1:size(statVal_obs, 2)
+                    if di_cfg.analysis.ignore_col(colIdx)
+                        continue
+                    end
+                    vals_perm = null_values(:, colIdx);
+                    val_obs = statVal_obs(colIdx);
+                    pval_raw(1, colIdx) = sum(abs(vals_perm) >= abs(val_obs)) / nIterations;
+                end
+
+            case 'parametric'
+                if ~isfield(results.observed, 'pVal_parametric')
+                    error('feature + parametric requires results.observed.pVal_parametric')
+                end
+                pval_raw = results.observed.pVal_parametric;
+
+            otherwise
+                error('unsupported testingApproach in permutation feature inference path')
+        end
+
+        % uncorrected (i.e., raw) p-values for feature-level downstream helpers
+        results.inference.feature.pVal_raw = pval_raw;
+        results.inference.feature.multComp = di_cfg.analysis.correction;
+
+        % 2. apply selected multiple-comparison correction
+        if strcmp(di_cfg.analysis.correction, 'FDR')
+            pval_corr = di_fdrPoolCorrect(pval_raw, ignore_col, dimSizes, di_cfg.analysis.FDR_dimensions);
+            results.inference.feature.pVal_corr = pval_corr;
+
+            % figure
+            if di_cfg.analysis.figFlag
+                figure(); clf
+                f = gcf; f.Units = 'normalized'; f.Position = [0.2    0    0.4    0.9];
+                vertJitterVec = randn(1,length(pval_raw(~di_cfg.analysis.ignore_col)));
+                lp1 = semilogx(pval_raw(~di_cfg.analysis.ignore_col),vertJitterVec.*ones(1,length(pval_raw(~di_cfg.analysis.ignore_col))),'o');
+                lp1.Parent.XLim = [0 1];
+                lp1.Parent.XTick = [0 0.01 0.05 0.1 0.2 0.5 1];
+                lp1.Parent.XAxis.Label.String = 'p value';
+                lp1.Parent.XMinorTick = 'off';
+                lp1.Parent.YAxis.Visible = 'off';
+                hold on
+                lp2 = semilogx(pval_corr(~di_cfg.analysis.ignore_col),vertJitterVec.*ones(1,length(pval_raw(~di_cfg.analysis.ignore_col))),'x');
+                ln = xline(di_cfg.analysis.p_crit);
+                legend([lp1 lp2 ln],["raw" "FDR corrected" "p_{crit}"],'Location','southoutside')
+                title('pvalues before vs after FDR correction')
             end
-            vals_perm = null_values(:, colIdx);
-            val_obs = statVal_obs(colIdx);
-            % p-value (two tailed): proportion of |null values| >= |observed|
-            pval_emp(1, colIdx) = sum(abs(vals_perm) >= abs(val_obs)) / nIterations;
-        end
-        
-        % FDR correction 
-        pval_emp_FDR = di_fdrPoolCorrect(pval_emp, ignore_col, dimSizes, di_cfg.analysis.FDR_dimensions);
 
-        % figure
-        if di_cfg.analysis.figFlag
-            figure(); clf
-            f = gcf; f.Units = 'normalized'; f.Position = [0.2    0    0.4    0.9];
-            vertJitterVec = randn(1,length(pval_emp(~di_cfg.analysis.ignore_col)));
-            lp1 = semilogx(pval_emp(~di_cfg.analysis.ignore_col),vertJitterVec.*ones(1,length(pval_emp(~di_cfg.analysis.ignore_col))),'o');
-            lp1.Parent.XLim = [0 1];
-            lp1.Parent.XTick = [0 0.01 0.05 0.1 0.2 0.5 1];
-            lp1.Parent.XAxis.Label.String = 'p value';
-            lp1.Parent.XMinorTick = 'off';
-            lp1.Parent.YAxis.Visible = 'off';
-            hold on
-            lp2 = semilogx(pval_emp_FDR(~di_cfg.analysis.ignore_col),vertJitterVec.*ones(1,length(pval_emp(~di_cfg.analysis.ignore_col))),'x');
-            ln = xline(di_cfg.analysis.p_crit);
-            legend([lp1 lp2 ln],["uncorrected" "FDR corrected" "p_{crit}"],'Location','southoutside')
-            title('pvalues before vs after FDR correction')
+        elseif strcmp(di_cfg.analysis.correction, 'maxT')
+            results = di_maxT(di_cfg, results);
+        else
+            error('unsupported di_cfg.analysis.correction value')
         end
 
-        % Store inference results in unified structure
-        results.inference.feature.pVal_emp     = pval_emp;
-        results.inference.feature.pVal_emp_FDR = pval_emp_FDR;
-
-    case 'permutationH0testing + empiricalFeature_inferenceCluster'
-        % not implemented, not difficult to code, but difficult for a
-        % computer to run: it requires nIterations per each iteration, so nIterations^2...
-        error('\\ not coded. probably I will never code this one')
-
-    case 'permutationH0testing + parametricFeature_inferenceFeature'
-        % - per feature: compare observed statistic against null distribution (permutation)
-        % - apply maxT correction on feature-level statistics
-        % Null distribution must be provided upstream as results.simulated.permutationH0.statVal
-        results = di_maxT(di_cfg, results);
-
-    case 'permutationH0testing + parametricFeature_inferenceCluster'
+    case 'permutationH0testing + cluster'
         % - (per each feature, use parametric statistics to get a p-value) (done upstream)
         % - (form clusters and compute cluster metrics for observed and simulated data) (done upstream)
         % - compares each observed cluster metric against null distribution
@@ -220,7 +225,7 @@ switch key
 
         %keyboard; % check this analysis works after the changes
 
-    case 'permutationH0testing + PLS_SVD'
+    case 'permutationH0testing + latent'
         % Mode-level permutation inference of SV metrics with maxT correction
         % - Per each mode, compares observed SV-based metrics against their null distributions
         % - Applies maxT correction across modes for multiple metrics:
@@ -236,15 +241,10 @@ switch key
         % Compute maxT-corrected p-values (FWER control)
         % Each mode compared against max across all modes per iteration
         results = di_maxT(di_cfg, results);
-    
-    case 'permutationH0testing + AJIVE'
-        error('\\ not coded yet')
 
-    case 'bootstrapStability + empiricalFeature_inferenceFeature'
+    case 'bootstrapStability + feature'
         % - per each feature, use resampled distribution to compute statistical scores stability
         % - optional, form clusters for descriptive purposes (done elsewhere, downstream)
-
-keyboard; % check this works after the changes
 
         % Get observed statistics and bootstrap distribution from unified structure
         statVal_obs = results.observed.statVal;  % [1 x pX]
@@ -281,19 +281,11 @@ keyboard; % check this works after the changes
         results.inference.feature.CIlo = CIlo;
         results.inference.feature.CIup = CIup;
 
-    case 'bootstrapStability + empiricalFeature_inferenceCluster'
-        % not implemented // unsure how to implement this
-        error('not coded. not gonna happen any time soon')
-
-    case 'bootstrapStability + parametricFeature_inferenceFeature'
-        % not implemented because not meaningful (or I could use both observed values and resampling distribution) 
-        error('not coded. it might happen but low priority')
-
-    case 'bootstrapStability + parametricFeature_inferenceCluster'
+    case 'bootstrapStability + cluster'
         % - not implemented // unsure how to implement this
         error('not coded yet. it would be nice but low priority');
 
-    case 'bootstrapStability + PLS_SVD'
+    case 'bootstrapStability + latent'
         %       - per each mode, uses resampled distribution to compute singular
 %       vectors stability
 %       - optional, form clusters for descriptive purposes
@@ -310,9 +302,6 @@ keyboard; % check this works after the changes
         U_obs = results.PLS_SVD.loadings.U_obs;      % (pY x nModes) observed Y loadings
         V_obs = results.PLS_SVD.loadings.V_obs;      % (pX x nModes) observed X loadings
 
-        nIterations = di_cfg.analysis.nIterations;
-        nModes = size(U_obs,2);
-        
         % STEP 2: Extract bootstrapped loadings (these are already
         % sign-aligned and rotated)
         U_boot = results.simulated.bootstrapStability.loadings.U_boot;   % (pY x nModes x nIterations)
@@ -351,9 +340,9 @@ keyboard; % check this works after the changes
         results.simulated.bootstrapStability.loadings.inference.U_95CIup = U_95CIup;
         results.simulated.bootstrapStability.loadings.inference.V_95CIlo = V_95CIlo;
         results.simulated.bootstrapStability.loadings.inference.V_95CIup = V_95CIup;
-        
-    case 'bootstrapStability + AJIVE'
-        error('not yet coded')
+
+    otherwise
+        error('unsupported analysis objective/inferenceLevel combination: %s', key)
 
 end
 
