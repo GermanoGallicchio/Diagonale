@@ -7,7 +7,7 @@ function results = di_analyze(di_cfg, Y, X)
 % INPUT:
 %   di_cfg      - struct with validated analysis configuration containing:
 %                 .analysis.nIterations, .analysis.dataStruct, .dimensions
-%                 .analysis.type ('empiricalFeature_inferenceFeature', 'parametricFeature_inferenceFeature', or 'parametricFeature_inferenceCluster')
+%                 .analysis.inferenceLevel ('feature', 'cluster', or 'latent')
 %   Y           - Primary data matrix (m x pData) where m = observations
 %   X           - Design/response matrix (m x pDesign). Content is flexible and analysis-dependent:
 %                 * Continuous predictors for correlation or PLS-SVD
@@ -101,9 +101,9 @@ if isfield(di_cfg.analysis, 'ignore_row')
 end
 
 % univariate analysis only does one comparison at the time
-if ismember(di_cfg.analysis.type, ["empiricalFeature_inferenceFeature" "parametricFeature_inferenceFeature" "parametricFeature_inferenceCluster"])
+if ismember(di_cfg.analysis.inferenceLevel, ["feature" "cluster"])
     if size(X,2)>1
-        error(['more than one column in matrix X (i.e., more than one comparison) not supported for ' di_cfg.analysis.type ])
+        error(['more than one column in matrix X (i.e., more than one comparison) not supported for inferenceLevel = ' char(di_cfg.analysis.inferenceLevel) ])
     end
 end
 
@@ -153,8 +153,8 @@ end
 if nCols_data ~= totalFeatureCount
     warning('Y columns (%d) differ from expected feature count from dimensions (%d)', nCols_data, totalFeatureCount);
 end
-if ismember(di_cfg.analysis.type, ["empiricalFeature_inferenceFeature" "parametricFeature_inferenceFeature" "parametricFeature_inferenceCluster"]) && nCols_design ~= 1
-    error(['more than one column in matrix X (i.e., more than one comparison) not supported for ' di_cfg.analysis.type ])
+if ismember(di_cfg.analysis.inferenceLevel, ["feature" "cluster"]) && nCols_design ~= 1
+    error(['more than one column in matrix X (i.e., more than one comparison) not supported for inferenceLevel = ' char(di_cfg.analysis.inferenceLevel) ])
 end
 
 if numel(sphIdx) > 1
@@ -163,7 +163,7 @@ end
 
 % cluster analyses do not support categorical dimensions
 % because clusters are based on adjacency
-if strcmp(di_cfg.analysis.type, "parametricFeature_inferenceCluster") && ~isempty(catIdx)
+if strcmp(di_cfg.analysis.inferenceLevel, "cluster") && ~isempty(catIdx)
     error('\\ categorical dimensions are not supported for cluster-based analyses');
 end
 
@@ -191,39 +191,36 @@ end
 %% delegate to appropriate analysis function 
 % based on type and design code
 
-% build key using analysis type and 2-digit design code
-key = sprintf('%s & %d  %d', di_cfg.analysis.type, di_cfg.analysis.designCode(1), di_cfg.analysis.designCode(2));
+% build key using inference level and 2-digit design code
+key = sprintf('%s & %d  %d', di_cfg.analysis.inferenceLevel, di_cfg.analysis.designCode(1), di_cfg.analysis.designCode(2));
 switch key
-    case {'empiricalFeature_inferenceFeature & 0  0', ...
-          'empiricalFeature_inferenceFeature & 0  1', ...
-          'empiricalFeature_inferenceFeature & 1  0', ...
-          'parametricFeature_inferenceFeature & 0  0', ...
-          'parametricFeature_inferenceFeature & 0  1', ...
-          'parametricFeature_inferenceFeature & 1  0', ...
-          'parametricFeature_inferenceCluster & 0  0', ...
-          'parametricFeature_inferenceCluster & 0  1', ...
-          'parametricFeature_inferenceCluster & 1  0'}
+    case {'feature & 0  0', ...
+          'feature & 0  1', ...
+          'feature & 1  0', ...
+          'cluster & 0  0', ...
+          'cluster & 0  1', ...
+          'cluster & 1  0'}
 
         % unified OLS engine for all univariate designs and analysis types:
         %   design [0 0] : correlation (Pearson or Spearman via di_cfg.analysis.OLS.corrType)
         %   design [0 1] : independent-groups t-test (Welch or Student via di_cfg.analysis.OLS.varianceType)
         %   design [1 0] : paired t-test (subject fixed effects)
         %
-        %   empiricalFeature_inferenceFeature  : beta statVal, empirical p-values via permutation
-        %   parametricFeature_inferenceFeature : beta statVal, OLS/Welch SE -> parametric p-values
-        %   parametricFeature_inferenceCluster : beta statVal, parametric p-values -> cluster forming
+        %   feature + empirical : beta statVal, empirical p-values via permutation
+        %   feature + parametric: beta statVal, OLS/Welch SE -> parametric p-values
+        %   cluster             : beta statVal, parametric p-values -> cluster forming
         % NOTE: convention here is Y=data matrix, X=design/contrast matrix.
         results = di_analysis_OLS(di_cfg, Y_input_pruned, X_input_pruned, rowIdx);
 
 
-    case {'PLS_SVD & 0  0', 'PLS_SVD & 1  0', 'PLS_SVD & 0  1', 'PLS_SVD & 1  1'}
+    case {'latent & 0  0', 'latent & 1  0', 'latent & 0  1', 'latent & 1  1'}
         % PLS-SVD multivariate analysis (all design codes)
         results = di_analysis_plsSVD(di_cfg, Y_input_pruned, X_input_pruned, rowIdx);
 
 
     otherwise
         % any other analysis type/design code combination
-        error(['\\ not yet coded: ' di_cfg.analysis.type ' & ' num2str(di_cfg.analysis.designCode)])
+        error(['\\ not yet coded: ' char(di_cfg.analysis.inferenceLevel) ' & ' num2str(di_cfg.analysis.designCode)])
 
 end
 
