@@ -7,7 +7,7 @@ function results = di_clusterDescribe(di_cfg,results)
 %   group significant points into interpretable clusters. But not a cluster inference itself 
 %
 % INPUT:
-%   di_cfg  - configuration with .analysis.objective and .analysis.type
+%   di_cfg  - configuration with .analysis.objective and .analysis.inferenceLevel
 %   results - contains observed descriptive metrics and inference results
 %
 % OUTPUT:
@@ -54,28 +54,17 @@ results.observed.clusters.statLabel = clusterStatLabel;
 
 %% descriptive clusters 
 
-key = sprintf('%s + %s', di_cfg.analysis.objective, di_cfg.analysis.type);
+key = sprintf('%s + %s', di_cfg.analysis.objective, di_cfg.analysis.inferenceLevel);
 
 switch key
     
-    case 'permutationH0testing + parametricFeature_inferenceFeature'
+    case 'permutationH0testing + feature'
         % descriptive cluster forming 
         % Inference was already done at feature level. Clustering is post-hoc for easier description only.
-        % Keep debugging hooks in place for this branch.
-        warning('double check code')
-        keyboard        
-        pVals2use = results.inference.feature.pVal_maxT.statVal;
-        pVals2use = pVals2use .* ~di_cfg.analysis.ignore_col; % apply ignore mask
-        [clusterMembership, clustIDList, metrics] = di_clusterForming(di_cfg, clusterStatVal, pVals2use);
-        results.observed.clusters.clusterMembership = clusterMembership;
-        results.observed.clusters.clustIDList       = clustIDList;
-        results.observed.clusters.metrics_obs       = metrics;
-        
-
-    case 'permutationH0testing + empiricalFeature_inferenceFeature'
-        % descriptive cluster forming 
-        % Inference was already done at feature level. Clustering is post-hoc for easier description only.
-        pVals2use = results.inference.feature.pVal_emp_FDR;
+        if ~isfield(results, 'inference') || ~isfield(results.inference, 'feature') || ~isfield(results.inference.feature, 'pVal_corr')
+            error('missing results.inference.feature.pVal_corr for descriptive cluster forming')
+        end
+        pVals2use = results.inference.feature.pVal_corr;
         pVals2use = pVals2use .* ~di_cfg.analysis.ignore_col; % apply ignore mask
         [clusterMembership, clustIDList, metrics] = di_clusterForming(di_cfg, clusterStatVal, pVals2use);
         results.observed.clusters.clusterMembership = clusterMembership;
@@ -83,25 +72,16 @@ switch key
         results.observed.clusters.metrics_obs       = metrics;
 
     
-    case 'permutationH0testing + parametricFeature_inferenceCluster'
+    case 'permutationH0testing + cluster'
         % Inferential clusters already formed upstream. Nothing else to do here.
 
-    case 'permutationH0testing + empiricalFeature_inferenceCluster'
-        % this path does not exist yet for pragmatic reasons... too much computation
-
-    case 'permutationH0testing + PLS_SVD'
-        % No descriptive cluster-forming step implemented for this mode.
-
-    case 'permutationH0testing + AJIVE'
+    case 'permutationH0testing + latent'
         % No descriptive cluster-forming step implemented for this mode.
         
 
 
 
-    case 'bootstrapStability + parametricFeature_inferenceFeature'
-        % this path does not exist: bootstrap yields empirical rather than parametric values
-
-    case 'bootstrapStability + empiricalFeature_inferenceFeature'
+    case 'bootstrapStability + feature'
         % Descriptive cluster forming
         % Form clusters from stable features in bootstrap analysis.
         mask_BRrob = logical(abs(results.inference.feature.BR_rob) > 2);
@@ -114,16 +94,10 @@ switch key
         results.observed.clusters.clustIDList       = clustIDList;
         results.observed.clusters.metrics_obs       = metrics;
     
-    case 'bootstrapStability + parametricFeature_inferenceCluster'
-        % this path does not exist
-
-    case 'bootstrapStability + empiricalFeature_inferenceCluster'
+    case 'bootstrapStability + cluster'
         % this path does not exist
     
-    case 'bootstrapStability + PLS_SVD'
-        % TO DO: if needed, define descriptive clustering on loadings.
-
-    case 'bootstrapStability + AJIVE'
+    case 'bootstrapStability + latent'
         % TO DO: if needed, define descriptive clustering on loadings.
 end
 
