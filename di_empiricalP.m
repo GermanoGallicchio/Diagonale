@@ -30,13 +30,12 @@ nIterations = di_cfg.analysis.nIterations;
 
 %% implementation
 
-switch di_cfg.analysis.type
+switch di_cfg.analysis.inferenceLevel
     
-    case {'empiricalFeature_inferenceFeature'}
-keyboard % until here ok but double check this section
-        % Feature-level empirical p-values
+    case 'feature'
+        % Feature-level empirical p-values (from permutation null)
         if ~isfield(results, 'simulated') || ~isfield(results.simulated, 'permutationH0') || ~isfield(results.simulated.permutationH0, 'statVal')
-            error('empiricalFeature_inferenceFeature: missing results.simulated.permutationH0.statVal')
+            error('feature inference: missing results.simulated.permutationH0.statVal')
         end
         
         statVal_obs = results.observed.statVal;  % (1 x pX)
@@ -54,33 +53,11 @@ keyboard % until here ok but double check this section
         
         results.inference.feature.pVal_emp = pVal_emp;
         
-    case {'parametricFeature_inferenceFeature'}
-keyboard % for debugging  // this path is not yet validated
-        % Feature-level empirical p-values (from permutation null)
-        if ~isfield(results, 'simulated') || ~isfield(results.simulated, 'permutationH0') || ~isfield(results.simulated.permutationH0, 'statVal')
-            error('parametricFeature_inferenceFeature: missing results.simulated.permutationH0.statVal')
-        end
-        
-        statVal_obs = results.observed.statVal;  % (1 x pX)
-        statVal_null = results.simulated.permutationH0.statVal;  % (nIterations x pX)
-        pX = size(statVal_obs, 2);
-        
-        pVal_emp = nan(1, pX);
-        for featIdx = 1:pX
-            if di_cfg.analysis.ignore_col(featIdx)
-                continue
-            end
-            pVal_emp(featIdx) = sum(abs(statVal_null(:, featIdx)) >= abs(statVal_obs(featIdx))) / nIterations;
-        end
-        
-        results.inference.feature.pVal_emp = pVal_emp;
-        
-    case {'parametricFeature_inferenceCluster'}
-keyboard % for debugging  // this path is not yet validated -- in fact I don't see any reason for using it... I might integrate it for completeness and curiosity
+    case 'cluster'
         % TO DO: integrate this branch (low priority)
         % Cluster-level empirical p-values
         if ~isfield(results, 'simulated') || ~isfield(results.simulated, 'permutationH0') || ~isfield(results.simulated.permutationH0, 'clusterMetrics')
-            error('parametricFeature_inferenceCluster: missing results.simulated.permutationH0.clusterMetrics')
+            error('cluster inference: missing results.simulated.permutationH0.clusterMetrics')
         end
         
         metrics_obs = results.observed.clusters.metrics_obs;
@@ -117,7 +94,7 @@ keyboard % for debugging  // this path is not yet validated -- in fact I don't s
         
         results.inference.cluster.pVal_emp = pVal_emp;
         
-    case {'PLS_SVD'}
+    case 'latent'
         % Mode-level empirical p-values (uncorrected, per-mode inference)
         % SVD returns singular values sorted in descending order by magnitude.
         % the nth position in the sorted SV sequence represents the  nth-strongest 
@@ -158,11 +135,8 @@ keyboard % for debugging  // this path is not yet validated -- in fact I don't s
 
         results.inference.mode.pVal_emp = pVal_emp;
         
-    case {'AJIVE'}
-        error('\\ not yet implemented')
-        
     otherwise
-        error('\\ Analysis type not supported: %s', di_cfg.analysis.type)
+        error('\\ Inference level not supported: %s', di_cfg.analysis.inferenceLevel)
 end
 
 %% sanity check figure 
@@ -172,7 +146,7 @@ end
 %% sanity check figure 
 % for PLS_SVD mode-level inference
 
-if strcmpi(di_cfg.analysis.type, 'PLS_SVD') && di_cfg.analysis.figFlag && nIterations > 2
+if strcmpi(di_cfg.analysis.inferenceLevel, 'latent') && di_cfg.analysis.figFlag && nIterations > 2
 
     % Get metric names and modes info
     modes_obs = results.PLS_SVD.modes;
