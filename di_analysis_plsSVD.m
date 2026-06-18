@@ -36,7 +36,6 @@ function results = di_analysis_plsSVD(di_cfg, Y_orig, X_orig, rowIdx)
 %   results       - unified results structure:
 %
 %     .observed.statVal       (nModes x 1) observed singular values
-%     .observed.pVal          empty (PLS doesn't use traditional p-values)
 %     .observed.clusters      empty struct (PLS operates on modes, not spatial features)
 % TO DO: I might want to create clusters from reliable features (e.g.,|BR|>2)
 %
@@ -78,7 +77,7 @@ pY       = prod(dimSizes);  % total number of X features
 
 % analysis objective and type
 analysisObjective = di_cfg.analysis.objective;
-analysisType      = di_cfg.analysis.type;
+inferenceLevel    = di_cfg.analysis.inferenceLevel;
 designCode        = di_cfg.analysis.designCode;
 
 % number of observations (rows in Y and X)
@@ -141,7 +140,7 @@ X_orig = double(X_orig);
 
 % check that PLS SVD parameters are configured
 if ~isfield(di_cfg.analysis, 'plssvdParams')
-    error('di_cfg.analysis.plssvdParams must be defined for %s + %s', analysisObjective, analysisType);
+    error('di_cfg.analysis.plssvdParams must be defined for %s + %s', analysisObjective, inferenceLevel);
 end
 
 % z-scoring options used throughout
@@ -361,7 +360,6 @@ end
 % --- observed data ---
 
 results.observed.statVal  = [];             % empty: PLS doesn't produce univariate statistics
-results.observed.pVal     = [];             % empty: PLS doesn't produce univariate statistics. p values will be computed at the mode level instead
 results.observed.clusters = struct();       % empty for now...
 % TO DO: I might want to embed some post-hoc clustering based on |BR| > 2 purely for descriptive reasons
 
