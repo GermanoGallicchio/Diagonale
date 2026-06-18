@@ -142,9 +142,16 @@ end
 %% shortcuts
 
 nIterations       = di_cfg.analysis.nIterations;
-analysisType      = di_cfg.analysis.type;
+inferenceLevel    = di_cfg.analysis.inferenceLevel;
+if isfield(di_cfg.analysis, 'testingApproach')
+    testingApproach = di_cfg.analysis.testingApproach;
+else
+    % bootstrap paths do not require explicit testingApproach
+    testingApproach = 'empirical';
+end
 analysisObjective = di_cfg.analysis.objective;
 designCode        = di_cfg.analysis.designCode;
+ignore_col        = logical(di_cfg.analysis.ignore_col);
 
 dimKeys  = fieldnames(di_cfg.dimensions);
 dimSizes = cellfun(@(k) length(di_cfg.dimensions.(k).vec), dimKeys);
@@ -153,12 +160,12 @@ pY       = prod(dimSizes);
 m = size(Y_orig, 1);
 
 % flags controlling what gets computed (if just betas or also se/df/t/r)
-needPVal    = ~strcmp(analysisType, 'empiricalFeature_inferenceFeature');
-needCluster = strcmp(analysisType, 'parametricFeature_inferenceCluster');
+needPVal    = ~strcmp(testingApproach, 'empirical');
+needCluster = strcmp(inferenceLevel, 'cluster');
 
 % sanity check: if we need cluster-based inference, we definitely also need parametric pvalues
 if needCluster && ~needPVal
-    error('Cluster-based inference requires parametric p-values, but analysisType is set to one that does not compute them. Please check your di_cfg.analysis.type setting.');
+    error('Cluster-based inference requires parametric p-values. Set di_cfg.analysis.testingApproach = ''parametric''.');
 end
 
 
@@ -185,6 +192,12 @@ end
 if size(rowIdx, 2) ~= nIterations
     error('rowIdx must have nIterations columns');
 end
+if numel(ignore_col) ~= pY
+    error('di_cfg.analysis.ignore_col must have pY elements');
+end
+if ~any(~ignore_col)
+    error('All features are ignored (ignore_col all true). Nothing to analyze.');
+end
 
 % design-specific checks
 if isequal(designCode, [0 1])
@@ -205,7 +218,7 @@ if isequal(designCode, [1 0])
 end
 if needCluster
     if ~isfield(di_cfg.analysis, 'clusterParams')
-        error('clusterParams must be defined for parametricFeature_inferenceCluster');
+        error('clusterParams must be defined for inferenceLevel = ''cluster''');
     end
 end
 
@@ -306,17 +319,27 @@ for itIdx = 1:nIterations
     % X_fit_augmented = [intercept, predictor, subject_dummies (for paired design)]
     X_fit_augmented = [ones(m, 1), X_fit, subjectDummies];
 
-    % --- OLS solve (vectorized across all pY outcomes) ---
-    % beta: [nPred x pY]
-    beta   = X_fit_augmented \ Y_fit;
-    statVal = beta(predictor_colIdx, :);  % [1 x pY]
+    % --- OLS solve (vectorized across non-ignored features only) ---
+    % beta_2use: [nPred x pY_2use]
+    Y_fit_2use = Y_fit(:, ~ignore_col);
+    beta_2use   = X_fit_augmented \ Y_fit_2use;
+    statVal = nan(1, pY);
+    statVal(1, ~ignore_col) = beta_2use(predictor_colIdx, :);
 
     % --- parametric p-values (only for parametric analysis types) ---
     if needPVal
         % compute parametric stats 
         % based on classical OLS or Welch approach
-        [tStat, pVal, df_iter] = di_computeParametricStats( ...
-            designCode, varianceType, Y_fit, X_fit_augmented, beta, predictor_colIdx, pY);
+        pY_2use = nnz(~ignore_col);
+        [tStat_2use, pVal_2use, df_iter_2use] = di_computeParametricStats( ...
+            designCode, varianceType, Y_fit_2use, X_fit_augmented, beta_2use, predictor_colIdx, pY_2use);
+
+        tStat = nan(1, pY);
+        pVal = nan(1, pY);
+        df_iter = nan(1, pY);
+        tStat(1, ~ignore_col) = tStat_2use;
+        pVal(1, ~ignore_col) = pVal_2use;
+        df_iter(1, ~ignore_col) = df_iter_2use;
 
     end
 
@@ -350,8 +373,15 @@ for itIdx = 1:nIterations
         else
             % compute parametric stats (only for iteration 1)
             % based on classical OLS or Welch approach
-            [tStat_obs, pVal_parametric_obs, df_parametric_obs] = di_computeParametricStats( ...
-                designCode, varianceType, Y_fit, X_fit_augmented, beta, predictor_colIdx, pY);
+            pY_2use = nnz(~ignore_col);
+            [tStat_obs_2use, pVal_parametric_obs_2use, df_parametric_obs_2use] = di_computeParametricStats( ...
+                designCode, varianceType, Y_fit_2use, X_fit_augmented, beta_2use, predictor_colIdx, pY_2use);
+            tStat_obs = nan(1, pY);
+            pVal_parametric_obs = nan(1, pY);
+            df_parametric_obs = nan(1, pY);
+            tStat_obs(1, ~ignore_col) = tStat_obs_2use;
+            pVal_parametric_obs(1, ~ignore_col) = pVal_parametric_obs_2use;
+            df_parametric_obs(1, ~ignore_col) = df_parametric_obs_2use;
         end
 
         % --- rVal_obs: Pearson r or Spearman rho via OLS on z-scored inputs (descriptive) ---
@@ -364,18 +394,24 @@ for itIdx = 1:nIterations
         %   is partial r controlling for subject effects (consistent with the model).
         X_fit_z  = (X_fit - mean(X_fit)) / std(X_fit);                  % z-score predictor
         Y_fit_z  = (Y_fit - mean(Y_fit, 1)) ./ std(Y_fit, 0, 1);        % z-score each outcome
+        Y_fit_z_2use = Y_fit_z(:, ~ignore_col);
         D_std    = [ones(m, 1), X_fit_z, subjectDummies];                % design matrix with z-scored predictor
-        beta_std = D_std \ Y_fit_z;                                      % [nPred x pY]
-        rVal_obs = beta_std(predictor_colIdx, :);                           % [1 x pY]
+        beta_std = D_std \ Y_fit_z_2use;                                 % [nPred x pY_2use]
+        rVal_obs = nan(1, pY);
+        rVal_obs(1, ~ignore_col) = beta_std(predictor_colIdx, :);     % [1 x pY]
 
         % --- dVal_obs: Cohen's d from observed raw data only (descriptive) ---
         % [0 1] -> pooled-SD Cohen's d (independent groups)
         % [1 0] -> Cohen's dz based on subject-level condition differences
         if isequal(designCode, [0 1])
-            dVal_obs = di_computeCohensD_between(Y, X);
+            dVal_2use = di_computeCohensD_between(Y(:, ~ignore_col), X);
+            dVal_obs = nan(1, pY);
+            dVal_obs(1, ~ignore_col) = dVal_2use;
         elseif isequal(designCode, [1 0])
             obsID_for_d = di_cfg.analysis.dataStruct.observationID(rowIdx(:, itIdx));
-            dVal_obs = di_computeCohensDz_within(Y, X, obsID_for_d);
+            dVal_2use = di_computeCohensDz_within(Y(:, ~ignore_col), X, obsID_for_d);
+            dVal_obs = nan(1, pY);
+            dVal_obs(1, ~ignore_col) = dVal_2use;
         else
             dVal_obs = nan(1, pY);
         end
@@ -397,7 +433,7 @@ for itIdx = 1:nIterations
                         struct('id', [], 'size', [], 'mass', [], 'mostExtremeVal', []), ...
                         1, nIterations);
                 else
-                    statVal_perm = zeros(nIterations, pY);
+                    statVal_perm = nan(nIterations, pY);
                 end
             end
             if needCluster
@@ -480,7 +516,7 @@ if needCluster
         error('clusters.clusterMembership_obs does not have pY columns');
     end
     if di_cfg.analysis.verbose && isempty(results.observed.clusters.clustIDList_obs)
-        if di_cfg.analysis.clusterParams.clusterFormingThreshold > 0
+        if di_cfg.analysis.clusterParams.clusterFormingPvalThreshold > 0
             warning('Diagonale: no clusters found in observed data');
         end
     end
