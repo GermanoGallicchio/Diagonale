@@ -4,10 +4,17 @@ function di_cfg = di_validateAnalysis(di_cfg)
 % 1. sanity checking required fields (and potentially add some as defaults)
 % 2. add a "validated" flag
 
-%% analysis types and objectives supported by Diagonale
+%% analysis options and objectives supported by Diagonale
 
-analysisTypes = {'empiricalFeature_inferenceFeature' 'parametricFeature_inferenceFeature' 'parametricFeature_inferenceCluster' 'PLS_SVD' 'AJIVE'};
 analysisObjectives = {'permutationH0testing' 'bootstrapStability'};
+inferenceLevels = {'feature' 'cluster' 'latent'};
+compatibilityRules = struct( ...
+    'objective', {'permutationH0testing', 'permutationH0testing', 'permutationH0testing', 'bootstrapStability', 'bootstrapStability', 'bootstrapStability'}, ...
+    'inferenceLevel', {'feature', 'cluster', 'latent', 'feature', 'cluster', 'latent'}, ...
+    'supported', {true, true, true, true, false, true}, ...
+    'testingApproaches', {{'parametric', 'empirical'}, {'parametric'}, {'empirical'}, {}, {}, {}}, ...
+    'corrections', {{'FDR', 'maxT'}, {'maxT'}, {'maxT'}, {}, {}, {}} ...
+    );
 
 %% check dimensions have been validated
 
@@ -37,9 +44,9 @@ if ~isfield(di_cfg,'analysis')
     error('di_cfg needs field: analysis');
 end
 
-% sanity check: di_cfg.analysis.type exists
-if ~isfield(di_cfg.analysis,'type')
-    error('di_cfg.analysis needs field: type');
+% sanity check: di_cfg.analysis.inferenceLevel exists
+if ~isfield(di_cfg.analysis,'inferenceLevel')
+    error('di_cfg.analysis needs field: inferenceLevel');
 end
 
 % sanity check: di_cfg.analysis.objective exists
@@ -47,11 +54,11 @@ if ~isfield(di_cfg.analysis,'objective')
     error('di_cfg.analysis needs field: objective');
 end
 
-% sanity check: analysis.type must be of the allowed kind
-if ~any(strcmp(di_cfg.analysis.type,analysisTypes))
-    disp("\\ allowed types: ")
-    disp(analysisTypes')
-    error('\\ di_cfg.analysis.type must be of any of the allowed types');
+% sanity check: analysis.inferenceLevel must be one of the allowed values
+if ~any(strcmp(di_cfg.analysis.inferenceLevel,inferenceLevels))
+    disp("\\ allowed inferenceLevel values: ")
+    disp(inferenceLevels')
+    error('\\ di_cfg.analysis.inferenceLevel must be one of the allowed values');
 end
 
 % sanity check: analysis.objective must be of the allowed objectives
@@ -95,15 +102,65 @@ end
 
 
 
+% --- permutation-specific compatibility checks ---
+isPermutation = strcmp(di_cfg.analysis.objective,'permutationH0testing');
+isFeatureLevel = strcmp(di_cfg.analysis.inferenceLevel,'feature');
+isClusterLevel = strcmp(di_cfg.analysis.inferenceLevel,'cluster');
+isLatentLevel  = strcmp(di_cfg.analysis.inferenceLevel,'latent');
+
+% find the specific compatibility rule for the chosen objective and inference level,
+% to check if they are compatible and to know which settings are required for the chosen 
+% combination of objective and inference level.
+ruleIdx = find(strcmp(di_cfg.analysis.objective, {compatibilityRules.objective}) & ...
+    strcmp(di_cfg.analysis.inferenceLevel, {compatibilityRules.inferenceLevel}), 1);
+if isempty(ruleIdx)
+    error('Internal validation error: no compatibility rule found for objective = ''%s'' and inferenceLevel = ''%s''', ...
+        di_cfg.analysis.objective, di_cfg.analysis.inferenceLevel)
+end
+selectedRule = compatibilityRules(ruleIdx);
+
+if ~selectedRule.supported
+    error('di_cfg.analysis.objective = ''%s'' is not supported with di_cfg.analysis.inferenceLevel = ''%s''', ...
+        di_cfg.analysis.objective, di_cfg.analysis.inferenceLevel)
+end
+
+if isPermutation
+    if ~isfield(di_cfg.analysis,'testingApproach')
+        error('permutationH0testing requires di_cfg.analysis.testingApproach')
+    end
+    if ~any(strcmp(di_cfg.analysis.testingApproach, selectedRule.testingApproaches))
+        disp('allowed testingApproach values:')
+        disp(selectedRule.testingApproaches)
+        error('\\ di_cfg.analysis.testingApproach must be one of the allowed values, mentioned above');
+    end
+
+    if ~isfield(di_cfg.analysis,'correction')
+        error('permutationH0testing requires di_cfg.analysis.correction')
+    end
+    if ~any(strcmp(di_cfg.analysis.correction, selectedRule.corrections))
+        disp('allowed correction values:')
+        disp(selectedRule.corrections)
+        error('\\ di_cfg.analysis.correction must be one of the allowed values, mentioned above');
+    end
+
+else
+    if isfield(di_cfg.analysis,'testingApproach')
+        error('di_cfg.analysis.testingApproach is only valid for di_cfg.analysis.objective = ''permutationH0testing''')
+    end
+    if isfield(di_cfg.analysis,'correction')
+        error('di_cfg.analysis.correction is only valid for di_cfg.analysis.objective = ''permutationH0testing''')
+    end
+end
+
 % --- cluster specific ---
 % cluster-based analysis: validate required cluster parameters
-if strcmp(di_cfg.analysis.type,'parametricFeature_inferenceCluster')
+if isClusterLevel
     if ~isfield(di_cfg.analysis,'clusterParams')
-        error('di_cfg.analysis.type = parametricFeature_inferenceCluster requires di_cfg.analysis.clusterParams')
+        error('di_cfg.analysis.inferenceLevel = ''cluster'' requires di_cfg.analysis.clusterParams')
     else
         if any(strcmp(dimTypes,'continuous'))
             if ~isfield(di_cfg.analysis.clusterParams,'distance_continuous_index')
-                error('parametricFeature_inferenceCluster with continuous dimensions requires clusterParams.distance_continuous_index (e.g., = 1)')
+                error('cluster inference with continuous dimensions requires clusterParams.distance_continuous_index (e.g., = 1)')
             end
         end
         if any(strcmp(dimTypes,'spherical'))
@@ -118,37 +175,46 @@ if strcmp(di_cfg.analysis.type,'parametricFeature_inferenceCluster')
                     di_cfg.analysis.clusterParams.distance_spherical_radians = 0.36;
                     warning('clusterParams.distance_spherical_radians not provided for 128-channel data. Using default: 0.36')
                 else
-                    error('parametricFeature_inferenceCluster with spherical dimensions requires clusterParams.distance_spherical_radians (e.g., = 0.63 for 32-channels or 0.36 for 128-channels)')
+                    error('cluster inference with spherical dimensions requires clusterParams.distance_spherical_radians (e.g., = 0.63 for 32-channels or 0.36 for 128-channels)')
                 end
             end
         end
         % adjacency matrix is necessary for cluster forming
         if ~isfield(di_cfg.analysis.clusterParams,'adjacencyMatrix')
-            error('parametricFeature_inferenceCluster requires clusterParams.adjacencyMatrix')
+            error('cluster inference requires clusterParams.adjacencyMatrix')
         end
     end
+elseif isfield(di_cfg.analysis,'clusterParams')
+    warning('\\ di_cfg.analysis.clusterParams provided but inferenceLevel is not ''cluster''. I will ignore di_cfg.analysis.clusterParams')
 end
 
-% --- FDR specific ---
-% Empirical feature-level analysis with permutation: FDR dimensions default
-if strcmp(di_cfg.analysis.type,'empiricalFeature_inferenceFeature') && strcmp(di_cfg.analysis.objective,'permutationH0testing')
-    if ~isfield(di_cfg.analysis,'FDR_dimensions')
-        di_cfg.analysis.FDR_dimensions = ones(1,length(fieldnames(di_cfg.dimensions)));
-        warning(['di_cfg.analysis.FDR_dimensions not provided. I am using ' num2str(di_cfg.analysis.FDR_dimensions) ' by default'])
-    else
-        if length(di_cfg.analysis.FDR_dimensions) ~= length(fieldnames(di_cfg.dimensions))
-            error('analysis.FDR_dimensions must match the number of dimensions');
+% --- feature-level multiple comparison correction specific ---
+% Feature-level + permutation analyses may require additional settings
+if isFeatureLevel && isPermutation
+
+    % FDR settings are required only when correction='FDR'.
+    if strcmp(di_cfg.analysis.correction,'FDR')
+        if ~isfield(di_cfg.analysis,'FDR_dimensions')
+            di_cfg.analysis.FDR_dimensions = ones(1,length(fieldnames(di_cfg.dimensions)));
+            warning(['di_cfg.analysis.FDR_dimensions not provided. I am using ' num2str(di_cfg.analysis.FDR_dimensions) ' by default'])
+        else
+            if length(di_cfg.analysis.FDR_dimensions) ~= length(fieldnames(di_cfg.dimensions))
+                error('analysis.FDR_dimensions must match the number of dimensions');
+            end
         end
+    elseif isfield(di_cfg.analysis,'FDR_dimensions')
+        error('di_cfg.analysis.FDR_dimensions is only valid when di_cfg.analysis.correction = ''FDR''')
     end
-elseif isfield(di_cfg.analysis,'FDR_dimensions')
-    % Provided but not applicable for the chosen type/objective
-    warning('di_cfg.analysis.FDR_dimensions provided but type/objective do not use FDR correction. I will ignore di_cfg.analysis.FDR_dimensions')
+else
+    if isfield(di_cfg.analysis,'FDR_dimensions')
+        error('di_cfg.analysis.FDR_dimensions is only valid for feature-level inference with permutation analyses with di_cfg.analysis.correction = ''FDR''')
+    end
 end
   
 
 % --- PLS SVD specific ---
 % PLS SVD parameters 
-if strcmp(di_cfg.analysis.type,'PLS_SVD')
+if isLatentLevel
     if ~isfield(di_cfg.analysis,'plssvdParams')
         di_cfg.analysis.plssvdParams = struct();
     end
@@ -160,8 +226,8 @@ if strcmp(di_cfg.analysis.type,'PLS_SVD')
         warning('\\ analysis.plssvdParams.zscoringVec not provided. Using default: [false, true] (X zscored, Y not zscored). For continuous associations, set to [true, true].')
     end
 elseif isfield(di_cfg.analysis,'plssvdParams')
-    % provided but not applicable for the chosen type/objective
-    warning('\\ di_cfg.analysis.plssvdParams provided but type/objective do not use PLS SVD. I will ignore di_cfg.analysis.plssvdParams')
+    % provided but not applicable for the chosen inference level/objective
+    warning('\\ di_cfg.analysis.plssvdParams provided but inferenceLevel/objective do not use latent inference. I will ignore di_cfg.analysis.plssvdParams')
 end
 
 %% dataStruct
@@ -237,7 +303,7 @@ else
 end
 
 % Default cluster forming p-threshold when clustering is used
-if strcmp(di_cfg.analysis.type,'parametricFeature_inferenceCluster')
+if isClusterLevel
     if ~isfield(di_cfg.analysis,'clusterParams') || ~isfield(di_cfg.analysis.clusterParams,'clusterFormingPvalThreshold')
         if ~isfield(di_cfg.analysis,'clusterParams')
             di_cfg.analysis.clusterParams = struct();
