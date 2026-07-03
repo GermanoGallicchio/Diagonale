@@ -90,7 +90,7 @@ end
 if strcmp(di_cfg.analysis.objective,'permutationH0testing')
     permuteUnitTypes = {'wholeObservation', 'withinObservation'};
     if ~isfield(di_cfg.analysis,'permuteUnit')
-        error('\\ permutation testing requires to speficy a type of permutation')
+        error('\\ permutation testing requires to speficy a type of permutation in di_cfg.analysis.permuteUnit')
     else
         if ~any(strcmp(di_cfg.analysis.permuteUnit, permuteUnitTypes))
             disp('allowed permuteUnit values:')
