@@ -219,11 +219,11 @@ if isLatentLevel
         di_cfg.analysis.plssvdParams = struct();
     end
     % Default zscoring vector: [Y_zscored, X_zscored]
-    % Default [false, true]: suitable for Task PLS-SVD (Y is task codes/contrast, X needs z-scoring)
+    % Default [true, false]: z-score Y side and keep X side mean-centered unless user overrides
     % For continuous associations (PLSCorrelation), manually set to [true, true] to z-score both X and Y
     if ~isfield(di_cfg.analysis.plssvdParams,'zscoringVec')
-        di_cfg.analysis.plssvdParams.zscoringVec = [false, true];
-        warning('\\ analysis.plssvdParams.zscoringVec not provided. Using default: [false, true] (X zscored, Y not zscored). For continuous associations, set to [true, true].')
+        di_cfg.analysis.plssvdParams.zscoringVec = [true, false];
+        warning('\\ analysis.plssvdParams.zscoringVec not provided. Using default: [true, false] (Y zscored, X not zscored). For continuous associations, set to [true, true].')
     end
 elseif isfield(di_cfg.analysis,'plssvdParams')
     % provided but not applicable for the chosen inference level/objective
