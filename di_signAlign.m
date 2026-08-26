@@ -8,7 +8,7 @@ function [U, V] = di_signAlign(U, V, U_ref, V_ref)
 %   [U, V] = di_signAlign(U, V, U_ref, V_ref)
 %
 % Inputs:
-%   U, V           - Current PLS loadings (nObs × nModes for U, nFeatures × nModes for V)
+%   U, V           - Current PLS loadings (pX x nModes for U, pY x nModes for V)
 %   U_ref, V_ref   - Reference loadings (e.g., from itIdx 1)
 %
 % Outputs:
