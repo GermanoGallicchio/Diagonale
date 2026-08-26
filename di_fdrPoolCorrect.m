@@ -28,6 +28,21 @@ if numel(poolDims) ~= nDims
     error('analysis.FDR_dimensions must match the number of dimensions');
 end
 
+% single-dimension case: avoid reshape/permute size-order assumptions
+if nDims == 1
+    pvalVec = pval_emp(:);
+    RignoreVec = logical(ignore_col(:));
+    pval_emp_FDR_col = nan(size(pvalVec));
+
+    pvalVec2use = pvalVec(~RignoreVec);
+    if ~isempty(pvalVec2use)
+        pval_emp_FDR_col(~RignoreVec) = di_FDR_BH(pvalVec2use);
+    end
+
+    pval_emp_FDR = reshape(pval_emp_FDR_col, 1, []);
+    return
+end
+
 % find idx of dimensions to FDR correct and not correct
 FDRdim_idx = find(poolDims); % dimensions to pool for the correction
 otherdim_idx = setdiff(1:nDims, FDRdim_idx, 'stable'); % the other dimensions
