@@ -44,7 +44,7 @@ function results = di_inference(di_cfg,results)
 %                       .values         (nIterations x pX) bootstrap samples
 %                       .loadings       (for PLS_SVD) bootstrap loading samples
 %                 .PLS_SVD            (for PLS_SVD analyses only)
-%                   .loadings.U_obs, .V_obs, .YU_obs, .XV_obs
+%                   .loadings.U_obs, .V_obs, .XU_obs, .YV_obs
 %                   .modes.s, .p, .r, .nModes
 %
 % OUTPUT:
@@ -299,13 +299,13 @@ switch key
         %   bootstrap ratios and narrower confidence intervals
 
         % STEP 1: Extract observed loadings (reference for alignment)
-        U_obs = results.PLS_SVD.loadings.U_obs;      % (pY x nModes) observed Y loadings
-        V_obs = results.PLS_SVD.loadings.V_obs;      % (pX x nModes) observed X loadings
+        U_obs = results.PLS_SVD.loadings.U_obs;      % (pX x nModes) observed X-side loadings
+        V_obs = results.PLS_SVD.loadings.V_obs;      % (pY x nModes) observed Y-side loadings
 
         % STEP 2: Extract bootstrapped loadings (these are already
         % sign-aligned and rotated)
-        U_boot = results.simulated.bootstrapStability.loadings.U_boot;   % (pY x nModes x nIterations)
-        V_boot = results.simulated.bootstrapStability.loadings.V_boot;   % (pX x nModes x nIterations)
+        U_boot = results.simulated.bootstrapStability.loadings.U_boot;   % (pX x nModes x nIterations)
+        V_boot = results.simulated.bootstrapStability.loadings.V_boot;   % (pY x nModes x nIterations)
         
         % STEP 3: Compute loading variability metrics
         % Bootstrap ratio (observed / bootstrap SD), conventional
@@ -317,8 +317,8 @@ switch key
         U_BR = nan(size(U_obs)); 
         V_BR = nan(size(V_obs));
         % compute SD across iterations
-        U_sd = std(U_boot, 0, 3);  % (pY x nModes)
-        V_sd = std(V_boot, 0, 3);  % (pX x nModes)
+        U_sd = std(U_boot, 0, 3);  % (pX x nModes)
+        V_sd = std(V_boot, 0, 3);  % (pY x nModes)
         % find idx across iterations of loadings with SD above tolerance
         % (meaningful variation across iterations) and to avoid diving by a
         % tiny number (potentially zero)
