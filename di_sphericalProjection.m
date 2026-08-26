@@ -35,7 +35,7 @@ sphPhi = [sphCoord.sphPhi(:); 0];
 
 radius = 1;
 
-projectionOptions = ["orthographic" "azimuthalEquidistant" "azimuthalConformal"];
+projectionOptions = ["orthographic" "azimuthalEquidistant" "azimuthalConformal" "azimuthalEqualArea"];
 if ~ismember(projectionType, projectionOptions)
     disp(projectionOptions)
     error('\\ projection option must be one of the above')
@@ -46,20 +46,16 @@ el  = deg2rad(sphPhi(:)');
 colat = (pi/2) - el;
 
 switch projectionType
-    case 'orthographic'
-        [x3, y3, z3] = sph2cart(az, el, radius);
-        xCoord = x3; yCoord = y3;
-    case 'azimuthalEquidistant'
-        [xTopo, yTopo] = pol2cart(az, radius * colat);
-        xCoord = xTopo; yCoord = yTopo;
-    case 'azimuthalConformal'
-        rho = tan(colat ./ 2);
-        [xStereo, yStereo] = pol2cart(az, radius * rho);
-        xCoord = xStereo; yCoord = yStereo;
-    case 'azimuthalEqualArea'
-        rho = sqrt(2) * sin(colat ./ 2);
-        [xLam, yLam] = pol2cart(az, radius * rho);
-        xCoord = xLam; yCoord = yLam;
+    case 'orthographic',         rho = sin(colat);
+    case 'azimuthalEquidistant', rho = colat;
+    case 'azimuthalConformal',   rho = tan(colat ./ 2);
+    case 'azimuthalEqualArea',   rho = sqrt(2) * sin(colat ./ 2);
+    otherwise, error('\\ unhandled projection: %s', projectionType)
+end
+[xCoord, yCoord] = pol2cart(az, radius * rho);
+
+if strcmp(projectionType,'orthographic') && any(colat > pi/2)
+    warning('\\ orthographic is not injective past the equator; %d channel(s) with negative elevation will fold inward', sum(colat > pi/2))
 end
 
 coord_2d = [xCoord' yCoord'];
