@@ -6,14 +6,14 @@ function [U_aligned, V_aligned] = di_procrustesRotate(U_obs, V_obs, U_boot, V_bo
 % subspace spanned by multiple modes.
 %
 % INPUT:
-%   U_obs       - (pY x nModes) observed Y loadings (reference)
-%   V_obs       - (pX x nModes) observed X loadings (reference)
-%   U_boot      - (pY x nModes) bootstrap Y loadings
-%   V_boot      - (pX x nModes) bootstrap X loadings
+%   U_obs       - (pX x nModes) observed X-side loadings (reference)
+%   V_obs       - (pY x nModes) observed Y-side loadings (reference)
+%   U_boot      - (pX x nModes) bootstrap X-side loadings
+%   V_boot      - (pY x nModes) bootstrap Y-side loadings
 %
 % OUTPUT:
-%   U_aligned   - (pY x nModes) Procrustes-aligned Y loadings
-%   V_aligned   - (pX x nModes) Procrustes-aligned X loadings
+%   U_aligned   - (pX x nModes) Procrustes-aligned X-side loadings
+%   V_aligned   - (pY x nModes) Procrustes-aligned Y-side loadings
 %
 % ALGORITHM:
 %     1. Build alignment matrix M = U_boot' * U_obs between the observed
@@ -32,8 +32,8 @@ function [U_aligned, V_aligned] = di_procrustesRotate(U_obs, V_obs, U_boot, V_bo
 
 %% SANITY CHECKS
 
-[pY, nModes] = size(U_obs);
-pX = size(V_obs, 1);
+[pX, nModes] = size(U_obs);
+pY = size(V_obs, 1);
 
 if size(V_obs, 2) ~= nModes
     error('U_obs and V_obs must have same number of modes');
@@ -68,11 +68,11 @@ if det(T) < 0
 end
 % NOTE: this step is needed to avoid improper rotations (reflections).
     
-% 5. Apply transformation (rotation) to Y and X bootstrapped loadings 
+% 5. Apply transformation (rotation) to X-side and Y-side bootstrapped loadings 
 U_aligned = U_boot * T;
 V_aligned = V_boot * T;
 % note: identical transformation matrix for both U and V to preserve the
-% geometric relationship between Y and X loading spaces. After this transformation, both U_aligned and V_aligned
+% geometric relationship between X and Y loading spaces. After this transformation, both U_aligned and V_aligned
 % are now in the same orientation as the observed loadings.
 
 end
