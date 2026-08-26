@@ -2,7 +2,12 @@ function coord_2d = di_sphericalProjection(di_cfg, projectionType)
 % Project spherical coordinates to 2D plane
 % Inputs:
 %   di_cfg - configuration struct with validated dimensions containing spherical coordinates
-%   projectionType - 'orthographic', 'azimuthalEquidistant', or 'azimuthalConformal'
+%   projectionType - one of the following ones:
+%           'orthographic',
+%           'azimuthalEquidistant',
+%           'azimuthalConformal'
+%           'azimuthalEqualArea' (Lambert)
+%
 % Output:
 %   coord_2d - [nChan x 2] matrix of 2D coordinates
 
@@ -51,6 +56,10 @@ switch projectionType
         rho = tan(colat ./ 2);
         [xStereo, yStereo] = pol2cart(az, radius * rho);
         xCoord = xStereo; yCoord = yStereo;
+    case 'azimuthalEqualArea'
+        rho = sqrt(2) * sin(colat ./ 2);
+        [xLam, yLam] = pol2cart(az, radius * rho);
+        xCoord = xLam; yCoord = yLam;
 end
 
 coord_2d = [xCoord' yCoord'];
