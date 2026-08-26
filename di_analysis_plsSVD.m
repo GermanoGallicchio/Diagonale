@@ -40,10 +40,10 @@ function results = di_analysis_plsSVD(di_cfg, Y_orig, X_orig, rowIdx)
 % TO DO: I might want to create clusters from reliable features (e.g.,|BR|>2)
 %
 %     .PLS_SVD      loading level (feature level)
-%       .loadings.U_obs       (pY x nModes) Y-side loadings in Y-variable space
-%       .loadings.V_obs       (pX x nModes) X singular vectors (loadings)
-%       .loadings.YU_obs      (m x nModes) Y latent scores
-%       .loadings.XV_obs      (m x nModes) X latent scores
+%       .loadings.U_obs       (pX x nModes) X-side loadings in X-variable space
+%       .loadings.V_obs       (pY x nModes) Y-side loadings in Y-variable space
+%       .loadings.XU_obs      (m x nModes) X latent scores
+%       .loadings.YV_obs      (m x nModes) Y latent scores
 %
 %     .PLS_SVD      mode level
 %       .modes.nModes         number of extracted latent variables
@@ -58,10 +58,10 @@ function results = di_analysis_plsSVD(di_cfg, Y_orig, X_orig, rowIdx)
 %         .permutationH0.modes.wilk       (nIterations x nModes) Wilks lambda
 %
 %     .resampling   loading level (feature level) inference (bootstrap)
-%         .bootstrapStability.loadings.U_boot   (pY x nModes x nIterations)
-%         .bootstrapStability.loadings.V_boot   (pX x nModes x nIterations)
-%         .bootstrapStability.loadings.YU_boot  (m x nModes x nIterations)
-%         .bootstrapStability.loadings.XV_boot  (m x nModes x nIterations)
+%         .bootstrapStability.loadings.U_boot   (pX x nModes x nIterations)
+%         .bootstrapStability.loadings.V_boot   (pY x nModes x nIterations)
+%         .bootstrapStability.loadings.XU_boot  (m x nModes x nIterations)
+%         .bootstrapStability.loadings.YV_boot  (m x nModes x nIterations)
 %
 % Author: Germano Gallicchio (germano.gallicchio@gmail.com)
 
@@ -73,7 +73,7 @@ nIterations = di_cfg.analysis.nIterations;
 % total number of features (product of all dimension sizes)
 dimKeys  = fieldnames(di_cfg.dimensions);
 dimSizes = cellfun(@(k) length(di_cfg.dimensions.(k).vec), dimKeys);
-pY       = prod(dimSizes);  % total number of X features
+pY       = prod(dimSizes);  % total number of Y features
 
 % analysis objective and type
 analysisObjective = di_cfg.analysis.objective;
@@ -299,7 +299,7 @@ for itIdx = 1:nIterations
     YV = Yz * V;    % Y latent scores (one per mode)
 
     % metrics: correlation between the two latent scores, per mode
-    r = diag(corr(XU, YV)); % Pearson correlation between Y and X latent variables (i.e., scores = data * singular vectors) (one per mode)
+    r = diag(corr(XU, YV)); % Pearson correlation between X and Y latent variables (i.e., scores = data * singular vectors) (one per mode)
     r = r(:); % enforce column vector
 
     % metrics: singular value based
@@ -310,8 +310,8 @@ for itIdx = 1:nIterations
 
     % store original-data values (observed)
     if itIdx==1
-        U_obs  = U;   % Y-side loadings (U singular vectors)
-        V_obs  = V;   % X-sude loadings (V singular vectors)
+        U_obs  = U;   % X-side loadings (U singular vectors)
+        V_obs  = V;   % Y-side loadings (V singular vectors)
         XU_obs = XU;  % latent scores: X * singular vectors for X
         YV_obs = YV;  % latent scores: Y * singular vectors for Y
         s_obs = s';   % as row (one per mode)
@@ -363,11 +363,11 @@ results.observed.statVal  = [];             % empty: PLS doesn't produce univari
 results.observed.clusters = struct();       % empty for now...
 % TO DO: I might want to embed some post-hoc clustering based on |BR| > 2 purely for descriptive reasons
 
-% feaure / loading level (contributions to latent variables)
-results.PLS_SVD.loadings.U_obs    = U_obs;          % (pY x nModes) Y-side loadings in Y-variable space
-results.PLS_SVD.loadings.V_obs    = V_obs;          % (pX x nModes) X singular vectors (loadings)
-results.PLS_SVD.loadings.XU_obs   = XU_obs;         % (m x nModes) Y latent scores
-results.PLS_SVD.loadings.YV_obs   = YV_obs;         % (m x nModes) X latent scores
+% feature / loading level (contributions to latent variables)
+results.PLS_SVD.loadings.U_obs    = U_obs;          % (pX x nModes) X-side loadings in X-variable space
+results.PLS_SVD.loadings.V_obs    = V_obs;          % (pY x nModes) Y-side loadings in Y-variable space
+results.PLS_SVD.loadings.XU_obs   = XU_obs;         % (m x nModes) X latent scores
+results.PLS_SVD.loadings.YV_obs   = YV_obs;         % (m x nModes) Y latent scores
 
 % singular value level (overall latent variable metrics)
 results.PLS_SVD.modes.nModes   = nModes;         % number of latent variables
@@ -394,8 +394,8 @@ switch analysisObjective
         % store bootstrap resamples of singular vectors and data projection to them 
         % to later (downstream) assess their stability under sampling
         % variaiblity. Under .singularVectors to reflect 
-        results.simulated.bootstrapStability.loadings.U_boot   = U_boot(:,:,:);   % (pY x nModes x nIterations)
-        results.simulated.bootstrapStability.loadings.V_boot   = V_boot(:,:,:);   % (pX x nModes x nIterations)
+        results.simulated.bootstrapStability.loadings.U_boot   = U_boot(:,:,:);   % (pX x nModes x nIterations)
+        results.simulated.bootstrapStability.loadings.V_boot   = V_boot(:,:,:);   % (pY x nModes x nIterations)
         results.simulated.bootstrapStability.loadings.XU_boot  = XU_boot(:,:,:);  % (m x nModes x nIterations)
         results.simulated.bootstrapStability.loadings.YV_boot  = YV_boot(:,:,:);  % (m x nModes x nIterations)
 end
@@ -416,13 +416,13 @@ if size(results.PLS_SVD.modes.s, 2) ~= results.PLS_SVD.modes.nModes
     error('singular values .modes.s does not match nModes');
 end
 if size(results.PLS_SVD.loadings.U_obs, 2) ~= results.PLS_SVD.modes.nModes
-    error('Y-side loadings .loadings.U_obs does not match nModes');
+    error('X-side loadings .loadings.U_obs does not match nModes');
 end
 if size(results.PLS_SVD.loadings.V_obs, 2) ~= results.PLS_SVD.modes.nModes
-    error('X singular vectors .loadings.V_obs does not match nModes');
+    error('Y singular vectors .loadings.V_obs does not match nModes');
 end
 if size(results.PLS_SVD.loadings.V_obs, 1) ~= pY
-    error('X singular vectors .loadings.V_obs does not have pX rows');
+    error('Y singular vectors .loadings.V_obs does not have pY rows');
 end
 
 end
