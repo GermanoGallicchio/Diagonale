@@ -236,8 +236,9 @@ results = di_inference(di_cfg,results);
 
 %% cluster descriptive metrics
 % this bit is only doing something if clusters are meaningful
-
-results = di_clusterDescribe(di_cfg,results);
+if isfield(di_cfg.analysis, 'clusterParams')
+    results = di_clusterDescribe(di_cfg,results);
+end
 
 % keep full input matrices for downstream viewers after all processing
 results.inputData.Y = Y_input;
