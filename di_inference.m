@@ -70,11 +70,9 @@ function results = di_inference(di_cfg,results)
 %           for bootstrap, PLS_SVD
 %                   stored in .simulated.bootstrapStability.loadings.inference:
 %                   .U_sd, .V_sd                - standard deviation of loadings
-%                   .U_BR, .V_BR                - bootstrap ratio (observed / bootstrap SD)
+%                   .U_BR, .V_BR                - bootstrap ratio (observed / bootstrap SD) (stability estimate, NOT an inferential statistic - see NOTE ON INTERPRETATION in the bootstrapStability + latent case below)
 %                   .U_95CIlo, .U_95CIup        - lower/upper 95% confidence interval for U loadings
 %                   .V_95CIlo, .V_95CIup        - lower/upper 95% confidence interval for V loadings
-%                   .U_ci, .V_ci                - 95% confidence intervals [lower, upper] (stacked)
-%                   .U_aligned, .V_aligned      - Procrustes-aligned bootstrap samples
 %           for bootstrap, AJIVE
 %                   .mode       not yet implemented
 %
@@ -295,8 +293,22 @@ switch key
         %
         % STATISTICAL RATIONALE:
         %   Bootstrap resampling estimates sampling variability of PLS loadings.
-        %   stable loadings (reliable interpretation) have greater
-        %   bootstrap ratios and narrower confidence intervals
+        %   Loadings with smaller bootstrap SD were more stable across resamples.
+        %   Stability is not evidence of an effect.
+
+        % NOTE ON INTERPRETATION
+        % Bootstrap ratios (BR) are stability estimates, not inferential statistics.
+        % BR = observed loading / bootstrap SD of that loading. There is no null
+        % hypothesis attached to a BR, no null distribution against which it is
+        % evaluated, and no correction for multiple comparisons across features.
+        % The conventional |BR| > 2 threshold is a descriptive convention borrowed
+        % from the shape of a z statistic; it does not control any error rate.
+        % A large |BR| means a loading was stable under resampling. It does NOT
+        % mean the corresponding feature is associated with the other data block.
+        % Raw saliences are unit-norm-constrained coordinates of a singular vector,
+        % not per-feature parameters, so they have no population value to test.
+        % Use these fields for description and to gauge sampling variability.
+        % Do not use them to localise effects.
 
         % STEP 1: Extract observed loadings (reference for alignment)
         U_obs = results.PLS_SVD.loadings.U_obs;      % (pX x nModes) observed X-side loadings
@@ -308,6 +320,19 @@ switch key
         V_boot = results.simulated.bootstrapStability.loadings.V_boot;   % (pY x nModes x nIterations)
         
         % STEP 3: Compute loading variability metrics
+        % NOTE ON INTERPRETATION
+        % Bootstrap ratios (BR) are stability estimates, not inferential statistics.
+        % BR = observed loading / bootstrap SD of that loading. There is no null
+        % hypothesis attached to a BR, no null distribution against which it is
+        % evaluated, and no correction for multiple comparisons across features.
+        % The conventional |BR| > 2 threshold is a descriptive convention borrowed
+        % from the shape of a z statistic; it does not control any error rate.
+        % A large |BR| means a loading was stable under resampling. It does NOT
+        % mean the corresponding feature is associated with the other data block.
+        % Raw saliences are unit-norm-constrained coordinates of a singular vector,
+        % not per-feature parameters, so they have no population value to test.
+        % Use these fields for description and to gauge sampling variability.
+        % Do not use them to localise effects.
         % Bootstrap ratio (observed / bootstrap SD), conventional
         % set tolerance
         eps0 = 1e-10;
@@ -319,6 +344,8 @@ switch key
         % compute SD across iterations
         U_sd = std(U_boot, 0, 3);  % (pX x nModes)
         V_sd = std(V_boot, 0, 3);  % (pY x nModes)
+        results.simulated.bootstrapStability.loadings.inference.U_sd = U_sd;
+        results.simulated.bootstrapStability.loadings.inference.V_sd = V_sd;
         % find idx across iterations of loadings with SD above tolerance
         % (meaningful variation across iterations) and to avoid diving by a
         % tiny number (potentially zero)
