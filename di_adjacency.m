@@ -3,7 +3,7 @@ function [adjMatrix] = di_adjacency(di_cfg)
 % continuity/neighborhood along dimensions in the data, which can only be
 % defined for continuous dimensions (e.g., time) or spherical (e.g., EEG
 % channels). Using information about the dimensions (see
-% di_validateDimensions), it creates a (sparse) adjacency matrix describing
+% di_validateFeatureDims), it creates a (sparse) adjacency matrix describing
 % continuity/neighborhood across a vectorized pool of all levels of all
 % dimensions (i.e., all levels vs all levels). 1=neighbor, 0=not neighbor.
 % Having an adjacency matrix is essential for the cluster forming
@@ -28,7 +28,7 @@ function [adjMatrix] = di_adjacency(di_cfg)
 %% input sanity checks
 
 if ~isfield(di_cfg,'dimensions')
-    error('di_cfg.dimensions needed')
+    error('di_cfg.featureDims needed')
 end
 
 if ~isfield(di_cfg.analysis,'clusterParams')
@@ -38,9 +38,9 @@ end
 %% shortcuts 
 
 % Extract dimensions in d# order (fieldnames order)
-dimKeys = fieldnames(di_cfg.dimensions);
-dimTypes = cellfun(@(k) di_cfg.dimensions.(k).type, dimKeys, 'UniformOutput', false);
-dimSizes = cellfun(@(k) length(di_cfg.dimensions.(k).vec), dimKeys);
+dimKeys = fieldnames(di_cfg.featureDims);
+dimTypes = cellfun(@(k) di_cfg.featureDims.(k).type, dimKeys, 'UniformOutput', false);
+dimSizes = cellfun(@(k) length(di_cfg.featureDims.(k).vec), dimKeys);
 nDims = numel(dimKeys);
 
 % Identify dimension types
@@ -138,7 +138,7 @@ switch sparseApproach
                 seedChanIdx = pIdx_subs{sphIdx(1)};
                 chanNeighIdx = find(sphericalDistanceMatrix(seedChanIdx, :) <= distance_spherical_radians);
                 %chanNeighLbl =
-                %di_cfg.dimensions.(dimKeys{sphIdx}).vec(chanNeighIdx);  % just for curiosity
+                %di_cfg.featureDims.(dimKeys{sphIdx}).vec(chanNeighIdx);  % just for curiosity
                 criterion2 = ismember(dimGrids{sphIdx}, chanNeighIdx);
             else
                 criterion2 = true(size(dimGrids{1}));

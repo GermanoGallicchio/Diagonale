@@ -27,15 +27,15 @@ if isfield(di_cfg,'validation')
 end
 
 if dimensionValidation==false
-    error('di_cfg.dimensions not validated. use: di_cfg = di_validateDimensions(di_cfg)')
+    error('di_cfg.featureDims not validated. use: di_cfg = di_validateFeatureDims(di_cfg)')
 end
 
 %% shortcuts
 
 % dimensions
-dimKeys  = fieldnames(di_cfg.dimensions);
-dimTypes = cellfun(@(k) di_cfg.dimensions.(k).type, dimKeys, 'UniformOutput', false);
-dimSizes = cellfun(@(k) length(di_cfg.dimensions.(k).vec), dimKeys);
+dimKeys  = fieldnames(di_cfg.featureDims);
+dimTypes = cellfun(@(k) di_cfg.featureDims.(k).type, dimKeys, 'UniformOutput', false);
+dimSizes = cellfun(@(k) length(di_cfg.featureDims.(k).vec), dimKeys);
 
 %% validation checks
 
@@ -195,10 +195,10 @@ if isFeatureLevel && isPermutation
     % FDR settings are required only when correction='FDR'.
     if strcmp(di_cfg.analysis.correction,'FDR')
         if ~isfield(di_cfg.analysis,'FDR_dimensions')
-            di_cfg.analysis.FDR_dimensions = ones(1,length(fieldnames(di_cfg.dimensions)));
+            di_cfg.analysis.FDR_dimensions = ones(1,length(fieldnames(di_cfg.featureDims)));
             warning(['di_cfg.analysis.FDR_dimensions not provided. I am using ' num2str(di_cfg.analysis.FDR_dimensions) ' by default'])
         else
-            if length(di_cfg.analysis.FDR_dimensions) ~= length(fieldnames(di_cfg.dimensions))
+            if length(di_cfg.analysis.FDR_dimensions) ~= length(fieldnames(di_cfg.featureDims))
                 error('analysis.FDR_dimensions must match the number of dimensions');
             end
         end

@@ -153,8 +153,8 @@ analysisObjective = di_cfg.analysis.objective;
 designCode        = di_cfg.analysis.designCode;
 ignore_col        = logical(di_cfg.analysis.ignore_col);
 
-dimKeys  = fieldnames(di_cfg.dimensions);
-dimSizes = cellfun(@(k) length(di_cfg.dimensions.(k).vec), dimKeys);
+dimKeys  = fieldnames(di_cfg.featureDims);
+dimSizes = cellfun(@(k) length(di_cfg.featureDims.(k).vec), dimKeys);
 pY       = prod(dimSizes);
 
 m = size(Y_orig, 1);

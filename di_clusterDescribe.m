@@ -25,8 +25,8 @@ function results = di_clusterDescribe(di_cfg,results)
 
 % num of dimensions and their numerosity 
 % in d# order (fieldnames order)
-dimKeys  = fieldnames(di_cfg.dimensions);
-dimTypes = cellfun(@(k) di_cfg.dimensions.(k).type, dimKeys, 'UniformOutput', false);
+dimKeys  = fieldnames(di_cfg.featureDims);
+dimTypes = cellfun(@(k) di_cfg.featureDims.(k).type, dimKeys, 'UniformOutput', false);
 
 % TO DO: if this check is done upstream in the validation of dimensions, this can be deleted
 if nnz(strcmp(dimTypes, 'spherical')) > 1

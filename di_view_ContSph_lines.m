@@ -7,7 +7,7 @@ function usedViewParams = di_view_ContSph_lines(di_cfg, data, highlightMasks, vi
 %   usedViewParams = di_view_ContSph_lines(di_cfg, data, highlightMasks, viewParams)
 %
 % REQUIRED INPUTS:
-%   di_cfg.dimensions   - dimension metadata (same schema used in Diagonale)
+%   di_cfg.featureDims   - dimension metadata (same schema used in Diagonale)
 %   data                - struct array with one element per line and fields:
 %                         .name      label used in the legend
 %                         .values    [nCont x nSph] values
@@ -30,9 +30,9 @@ if ~isstruct(di_cfg)
     error('\\ di_cfg must be a structure')
 end
 
-% sanity check: di_cfg.dimensions exists
+% sanity check: di_cfg.featureDims exists
 if ~isfield(di_cfg,'dimensions')
-    error('\\ di_cfg.dimensions must exist')
+    error('\\ di_cfg.featureDims must exist')
 end
 
 % sanity check: data is a structure
@@ -57,27 +57,27 @@ end
 
 %% shortcuts (d# order)
 
-dimKeys  = fieldnames(di_cfg.dimensions);
-dimVecs  = cellfun(@(k) di_cfg.dimensions.(k).vec, dimKeys, 'UniformOutput', false);
-dimLbls  = cellfun(@(k) di_cfg.dimensions.(k).lbl, dimKeys, 'UniformOutput', false);
-dimUnits = cellfun(@(k) di_cfg.dimensions.(k).units, dimKeys, 'UniformOutput', false);
-dimTypes = cellfun(@(k) di_cfg.dimensions.(k).type, dimKeys, 'UniformOutput', false);
-dimSizes = cellfun(@(k) length(di_cfg.dimensions.(k).vec), dimKeys);
+dimKeys  = fieldnames(di_cfg.featureDims);
+dimVecs  = cellfun(@(k) di_cfg.featureDims.(k).vec, dimKeys, 'UniformOutput', false);
+dimLbls  = cellfun(@(k) di_cfg.featureDims.(k).lbl, dimKeys, 'UniformOutput', false);
+dimUnits = cellfun(@(k) di_cfg.featureDims.(k).units, dimKeys, 'UniformOutput', false);
+dimTypes = cellfun(@(k) di_cfg.featureDims.(k).type, dimKeys, 'UniformOutput', false);
+dimSizes = cellfun(@(k) length(di_cfg.featureDims.(k).vec), dimKeys);
 
 contDimIdx = find(strcmp(dimTypes, 'continuous'), 1);
 sphIdx = find(strcmp(dimTypes, 'spherical'), 1);
 
 if isempty(contDimIdx)
-    error('\\ di_cfg.dimensions requires one continuous dimension')
+    error('\\ di_cfg.featureDims requires one continuous dimension')
 end
 if isempty(sphIdx)
-    error('\\ di_cfg.dimensions requires one spherical dimension')
+    error('\\ di_cfg.featureDims requires one spherical dimension')
 end
 
 xVals = dimVecs{contDimIdx};
 nx2 = dimSizes(contDimIdx);
 nz3 = dimSizes(sphIdx);
-chanLabels = string(di_cfg.dimensions.(dimKeys{sphIdx}).vec);
+chanLabels = string(di_cfg.featureDims.(dimKeys{sphIdx}).vec);
 
 %% validate line specifications 
 % from data structure

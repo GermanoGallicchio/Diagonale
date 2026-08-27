@@ -54,9 +54,9 @@ function [clusterMembership, clustIDList, clusterMetrics] = ...
 %% shortcuts and input checks
 
 % Extract dimensions in d# order (fieldnames order)
-dimKeys  = fieldnames(di_cfg.dimensions);
-dimTypes = cellfun(@(k) di_cfg.dimensions.(k).type, dimKeys, 'UniformOutput', false);
-dimSizes = cellfun(@(k) length(di_cfg.dimensions.(k).vec), dimKeys);
+dimKeys  = fieldnames(di_cfg.featureDims);
+dimTypes = cellfun(@(k) di_cfg.featureDims.(k).type, dimKeys, 'UniformOutput', false);
+dimSizes = cellfun(@(k) length(di_cfg.featureDims.(k).vec), dimKeys);
 nDims    = numel(dimKeys);
 pX       = prod(dimSizes);  % total number of X features across all dimensions
 
@@ -289,7 +289,7 @@ for k = 1:numel(clustIDList)
     if ~isempty(contDimIdx)
         for dimIdx = contDimIdx
             dimKey = dimKeys{dimIdx};
-            dimVec = di_cfg.dimensions.(dimKey).vec;
+            dimVec = di_cfg.featureDims.(dimKey).vec;
             
             % Most extreme point coordinates
             dimIdx_extreme = subs{dimIdx};
@@ -306,7 +306,7 @@ for k = 1:numel(clustIDList)
     % Spherical dimension extreme point coordinates
     if ~isempty(sphDimIdx)
         sphKey = dimKeys{sphDimIdx};
-        sphVec = di_cfg.dimensions.(sphKey).vec;
+        sphVec = di_cfg.featureDims.(sphKey).vec;
         
         % Most extreme point channel
         sphIdx_extreme = subs{sphDimIdx};
@@ -324,7 +324,7 @@ for k = 1:numel(clustIDList)
     if ~isempty(contDimIdx)
         for dimIdx = contDimIdx
             dimKey = dimKeys{dimIdx};
-            dimVec = di_cfg.dimensions.(dimKey).vec;
+            dimVec = di_cfg.featureDims.(dimKey).vec;
 
             % in2sub to extract indices (per dimension) of cluster members
             [subs{1:nDims}] = ind2sub(dimSizes, find(idx));
@@ -350,7 +350,7 @@ for k = 1:numel(clustIDList)
     if ~isempty(sphDimIdx)
 
         sphKey = dimKeys{sphDimIdx};
-        sphVec = di_cfg.dimensions.(sphKey).vec;  % channel labels/names
+        sphVec = di_cfg.featureDims.(sphKey).vec;  % channel labels/names
         [subs{1:nDims}] = ind2sub(dimSizes, find(idx));
         sphIndicesInCluster = subs{sphDimIdx};  % channel idx of cluster members
         uniqueSphIdx = unique(sphIndicesInCluster);  % remove duplicates

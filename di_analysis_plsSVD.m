@@ -71,8 +71,8 @@ function results = di_analysis_plsSVD(di_cfg, Y_orig, X_orig, rowIdx)
 nIterations = di_cfg.analysis.nIterations;
 
 % total number of features (product of all dimension sizes)
-dimKeys  = fieldnames(di_cfg.dimensions);
-dimSizes = cellfun(@(k) length(di_cfg.dimensions.(k).vec), dimKeys);
+dimKeys  = fieldnames(di_cfg.featureDims);
+dimSizes = cellfun(@(k) length(di_cfg.featureDims.(k).vec), dimKeys);
 pY       = prod(dimSizes);  % total number of Y features
 
 % analysis objective and type

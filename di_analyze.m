@@ -24,7 +24,7 @@ function results = di_analyze(di_cfg, Y, X)
 %                 .clusterMetrics: cluster-based inference results (if applicable)
 %
 % PREREQUISITES:
-%   - di_cfg.dimensions and di_cfg.analysis must be validated
+%   - di_cfg.featureDims and di_cfg.analysis must be validated
 %   - di_cfg.analysis.dataStruct must contain: observationID, 
 %     indFactor# and repFactor# columns
 %
@@ -50,7 +50,7 @@ if isfield(di_cfg,'validation')
     end
 end
 if dimensionValidation==false
-    error('di_cfg.dimensions not validated. use: di_cfg = di_validateDimensions(di_cfg)')
+    error('di_cfg.featureDims not validated. use: di_cfg = di_validateFeatureDims(di_cfg)')
 end
 if analysisValidation==false
     error('di_cfg.analysis not validated. use: di_cfg = di_validateAnalysis(di_cfg)')
@@ -137,9 +137,9 @@ nCols_design = size(X, 2);
 
 % num of dimensions and their numerosity 
 % in d# order (fieldnames order)
-dimKeys  = fieldnames(di_cfg.dimensions);
-dimTypes = cellfun(@(k) di_cfg.dimensions.(k).type, dimKeys, 'UniformOutput', false);
-dimSizes = cellfun(@(k) length(di_cfg.dimensions.(k).vec), dimKeys);
+dimKeys  = fieldnames(di_cfg.featureDims);
+dimTypes = cellfun(@(k) di_cfg.featureDims.(k).type, dimKeys, 'UniformOutput', false);
+dimSizes = cellfun(@(k) length(di_cfg.featureDims.(k).vec), dimKeys);
 totalFeatureCount = prod(dimSizes);  % expected number of feature columns from dimensions
 
 contIdx = find(strcmp(dimTypes, 'continuous'));

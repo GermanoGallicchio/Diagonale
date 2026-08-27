@@ -1,5 +1,5 @@
 function sphericalDistanceMatrix = di_sphericalDistance(di_cfg)
-% Compute distance matrix between all sensors in the spherical dimension of di_cfg.dimensions
+% Compute distance matrix between all sensors in the spherical dimension of di_cfg.featureDims
 % Input: di_cfg - configuration struct with validated dimensions
 % Output: sphericalDistanceMatrix - angular distance in radians between all channel pairs
 
@@ -14,19 +14,19 @@ if isfield(di_cfg,'validation')
 end
 
 if dimensionValidation==false
-    error('\\ di_cfg.dimensions not validated. use: di_cfg = di_validateDimensions(di_cfg)')
+    error('\\ di_cfg.featureDims not validated. use: di_cfg = di_validateFeatureDims(di_cfg)')
 end
 
 %% spherical dimension checks
 
 % Extract dimension metadata
-dimKeys = fieldnames(di_cfg.dimensions);
-dimTypes = cellfun(@(k) di_cfg.dimensions.(k).type, dimKeys, 'UniformOutput', false);
+dimKeys = fieldnames(di_cfg.featureDims);
+dimTypes = cellfun(@(k) di_cfg.featureDims.(k).type, dimKeys, 'UniformOutput', false);
 
 % Find spherical dimension
 sphIdx = find(strcmp(dimTypes, 'spherical'));
 if isempty(sphIdx)
-    error('\\ di_sphericalDistance requires a spherical dimension in di_cfg.dimensions');
+    error('\\ di_sphericalDistance requires a spherical dimension in di_cfg.featureDims');
 end
 if length(sphIdx) > 1
     warning('\\ Multiple spherical dimensions found. Using the first one: %s', dimKeys{sphIdx(1)});
@@ -34,9 +34,9 @@ end
 
 % Extract spherical coordinates
 sphKey = dimKeys{sphIdx(1)};
-sphCoord = di_cfg.dimensions.(sphKey).coord;
-sphCoord.labels = di_cfg.dimensions.(sphKey).vec;
-nChan = di_cfg.dimensions.(sphKey).num;
+sphCoord = di_cfg.featureDims.(sphKey).coord;
+sphCoord.labels = di_cfg.featureDims.(sphKey).vec;
+nChan = di_cfg.featureDims.(sphKey).num;
 
 %% computations
 

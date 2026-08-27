@@ -40,10 +40,10 @@ end
 
 %% shortcuts
 
-dimKeys = fieldnames(di_cfg.dimensions);
-dimTypes = cellfun(@(k) di_cfg.dimensions.(k).type, dimKeys, 'UniformOutput', false);
-dimLbls = cellfun(@(k) di_cfg.dimensions.(k).lbl, dimKeys, 'UniformOutput', false);
-dimUnits = cellfun(@(k) di_cfg.dimensions.(k).units, dimKeys, 'UniformOutput', false);
+dimKeys = fieldnames(di_cfg.featureDims);
+dimTypes = cellfun(@(k) di_cfg.featureDims.(k).type, dimKeys, 'UniformOutput', false);
+dimLbls = cellfun(@(k) di_cfg.featureDims.(k).lbl, dimKeys, 'UniformOutput', false);
+dimUnits = cellfun(@(k) di_cfg.featureDims.(k).units, dimKeys, 'UniformOutput', false);
 
 % get cluster information
 clusterMetrics = results.observed.clusters.metrics_obs;

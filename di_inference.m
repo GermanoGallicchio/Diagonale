@@ -86,9 +86,9 @@ function results = di_inference(di_cfg,results)
 nIterations = di_cfg.analysis.nIterations;
 
 % extract dimensions in d# order (fieldnames order)
-dimKeys  = fieldnames(di_cfg.dimensions);
-dimTypes = cellfun(@(k) di_cfg.dimensions.(k).type, dimKeys, 'UniformOutput', false);
-dimSizes = cellfun(@(k) length(di_cfg.dimensions.(k).vec), dimKeys);
+dimKeys  = fieldnames(di_cfg.featureDims);
+dimTypes = cellfun(@(k) di_cfg.featureDims.(k).type, dimKeys, 'UniformOutput', false);
+dimSizes = cellfun(@(k) length(di_cfg.featureDims.(k).vec), dimKeys);
 nDims    = numel(dimKeys);
 pX       = prod(dimSizes);  % total number of X features across all dimensions
 
