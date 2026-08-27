@@ -79,6 +79,27 @@ for dIdx = 1:length(dims)
     end
 end
 
+% spherical dimension must be declared last
+% keeping the exception order explicit: "at most one spherical" is checked first
+% and the spatial-order error is raised only when the declaration order is wrong
+
+dimKeys = fieldnames(di_cfg.featureDims);
+dimTypes = cellfun(@(k) di_cfg.featureDims.(k).type, dimKeys, 'UniformOutput', false);
+sphIdx = find(strcmp(dimTypes,'spherical'));
+if numel(sphIdx) > 1
+    error('\ Only one spherical dimension is supported');
+end
+if ~isempty(sphIdx) && sphIdx ~= numel(dimKeys)
+    error(['Spherical dimension must be declared last. Found ''%s'' (type ' ...
+        '''spherical'') at position %d of %d.\n' ...
+        'Reorder the d# fields of di_cfg.dimensions so the spherical ' ...
+        'dimension comes last (e.g. d1 = time, d2 = frequency, ' ...
+        'd3 = channel).\n' ...
+        'This convention keeps figure data and figure axis labels derived ' ...
+        'from the same declaration order.'], ...
+        dimKeys{sphIdx}, sphIdx, numel(dimKeys));
+end
+
 %% defaults
 
 for dIdx = 1:length(dims)
