@@ -1,4 +1,4 @@
 Version: v1.0.0
-Release Date: 18 August 2025
+Release Date: 3 July 2026
 Author: Germano Gallicchio
-Repository: https://github.com/GermanoGallicchio/PhysioExplorer
+Repository: https://github.com/GermanoGallicchio/Diagonale
