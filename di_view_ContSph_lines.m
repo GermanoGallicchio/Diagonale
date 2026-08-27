@@ -139,22 +139,28 @@ end
 
 %% defaults
 fieldNames = fieldnames(viewParams);
+autoFilledFields = {};
 
 if ~any(strcmp(fieldNames, 'xLabel'))
     viewParams.xLabel = [dimLbls{contDimIdx} ' [' dimUnits{contDimIdx} ']'];
+    autoFilledFields{end+1} = 'xLabel';
 end
 if ~any(strcmp(fieldNames, 'hLim'))
     viewParams.hLim = prctile(xVals, [0 100]);
+    autoFilledFields{end+1} = 'hLim';
 end
 if ~any(strcmp(fieldNames, 'hStep'))
     viewParams.hStep = range(xVals);
+    autoFilledFields{end+1} = 'hStep';
 end
 if ~any(strcmp(fieldNames, 'xAxis4z3Lbl'))
     viewParams.xAxis4z3Lbl = chanLabels([1 end]);
+    autoFilledFields{end+1} = 'xAxis4z3Lbl';
 end
 
 if ~any(strcmp(fieldNames, 'yLabel'))
     viewParams.yLabel = 'Value';
+    autoFilledFields{end+1} = 'yLabel';
 end
 if ~any(strcmp(fieldNames, 'vLim'))
     allVals = [];
@@ -170,56 +176,72 @@ if ~any(strcmp(fieldNames, 'vLim'))
         vLim = [-maxAbs maxAbs];
     end
     viewParams.vLim = vLim;
+    autoFilledFields{end+1} = 'vLim';
 end
 if ~any(strcmp(fieldNames, 'vStep'))
     viewParams.vStep = range(viewParams.vLim);
+    autoFilledFields{end+1} = 'vStep';
 end
 if ~any(strcmp(fieldNames, 'hTickLabelRotation'))
     viewParams.hTickLabelRotation = 90;
+    autoFilledFields{end+1} = 'hTickLabelRotation';
 end
 if ~any(strcmp(fieldNames, 'vTickLabelRotation'))
     viewParams.vTickLabelRotation = 0;
+    autoFilledFields{end+1} = 'vTickLabelRotation';
 end
 if ~any(strcmp(fieldNames, 'yAxis4z3Lbl'))
     viewParams.yAxis4z3Lbl = chanLabels([1 end]);
+    autoFilledFields{end+1} = 'yAxis4z3Lbl';
 end
 if ~any(strcmp(fieldNames, 'title4z3Lbl'))
     viewParams.title4z3Lbl = strings(1, 0);
+    autoFilledFields{end+1} = 'title4z3Lbl';
 end
 
 if ~any(strcmp(fieldNames, 'xyLength'))
     viewParams.xyLength = [0.155 0.09];
+    autoFilledFields{end+1} = 'xyLength';
 end
 if ~any(strcmp(fieldNames, 'xyPadding'))
     viewParams.xyPadding = [0.030 0.010];
+    autoFilledFields{end+1} = 'xyPadding';
 end
 if ~any(strcmp(fieldNames, 'panelPosition'))
     viewParams.panelPosition = [0 0 1 1];
+    autoFilledFields{end+1} = 'panelPosition';
 end
 if ~any(strcmp(fieldNames, 'projectionType'))
     viewParams.projectionType = 'azimuthalConformal';
+    autoFilledFields{end+1} = 'projectionType';
 end
 if ~any(strcmp(fieldNames, 'projectionWarping'))
     viewParams.projectionWarping = [0.75 1];
+    autoFilledFields{end+1} = 'projectionWarping';
 end
 if ~any(strcmp(fieldNames, 'defaultLineWidth'))
     viewParams.defaultLineWidth = 0.9;
+    autoFilledFields{end+1} = 'defaultLineWidth';
 end
 if ~any(strcmp(fieldNames, 'defaultLineStyle'))
     viewParams.defaultLineStyle = '-';
+    autoFilledFields{end+1} = 'defaultLineStyle';
 end
 if any(strcmp(fieldNames, 'lineColorPalette')) && size(viewParams.lineColorPalette, 1) < nLines
     error('viewParams.lineColorPalette must have at least one row per line')
 end
 if ~any(strcmp(fieldNames, 'legendVisible'))
     viewParams.legendVisible = true;
+    autoFilledFields{end+1} = 'legendVisible';
 end
 if ~any(strcmp(fieldNames, 'legendPosition'))
     panel = viewParams.panelPosition;
     viewParams.legendPosition = [panel(1) + 0.05 * panel(3) panel(2) + 0.88 * panel(4) 0.2 * panel(3) 0.08 * panel(4)];
+    autoFilledFields{end+1} = 'legendPosition';
 end
 if ~any(strcmp(fieldNames, 'verboseDefaults'))
     viewParams.verboseDefaults = false;
+    autoFilledFields{end+1} = 'verboseDefaults';
 end
 
 %% defaults for mask style
