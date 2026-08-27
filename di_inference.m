@@ -320,19 +320,6 @@ switch key
         V_boot = results.simulated.bootstrapStability.loadings.V_boot;   % (pY x nModes x nIterations)
         
         % STEP 3: Compute loading variability metrics
-        % NOTE ON INTERPRETATION
-        % Bootstrap ratios (BR) are stability estimates, not inferential statistics.
-        % BR = observed loading / bootstrap SD of that loading. There is no null
-        % hypothesis attached to a BR, no null distribution against which it is
-        % evaluated, and no correction for multiple comparisons across features.
-        % The conventional |BR| > 2 threshold is a descriptive convention borrowed
-        % from the shape of a z statistic; it does not control any error rate.
-        % A large |BR| means a loading was stable under resampling. It does NOT
-        % mean the corresponding feature is associated with the other data block.
-        % Raw saliences are unit-norm-constrained coordinates of a singular vector,
-        % not per-feature parameters, so they have no population value to test.
-        % Use these fields for description and to gauge sampling variability.
-        % Do not use them to localise effects.
         % Bootstrap ratio (observed / bootstrap SD), conventional
         % set tolerance
         eps0 = 1e-10;
