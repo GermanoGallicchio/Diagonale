@@ -31,7 +31,7 @@ if ~isstruct(di_cfg)
 end
 
 % sanity check: di_cfg.featureDims exists
-if ~isfield(di_cfg,'dimensions')
+if ~isfield(di_cfg,'featureDims')
     error('\\ di_cfg.featureDims must exist')
 end
 

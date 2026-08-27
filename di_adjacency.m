@@ -27,7 +27,7 @@ function [adjMatrix] = di_adjacency(di_cfg)
 
 %% input sanity checks
 
-if ~isfield(di_cfg,'dimensions')
+if ~isfield(di_cfg,'featureDims')
     error('di_cfg.featureDims needed')
 end
 
