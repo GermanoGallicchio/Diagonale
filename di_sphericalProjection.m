@@ -1,4 +1,4 @@
-function coord_2d = di_sphericalProjection(di_cfg, projectionType)
+function [coord_2d, rhoFun] = di_sphericalProjection(di_cfg, projectionType)
 % Project spherical coordinates to 2D plane
 % Inputs:
 %   di_cfg - configuration struct with validated dimensions containing spherical coordinates
@@ -16,6 +16,9 @@ function coord_2d = di_sphericalProjection(di_cfg, projectionType)
 %   coord_2d - [(nChan+1) x 2] matrix of 2D coordinates
 %              rows 1:nChan   channels, in di_cfg dimension order
 %              row  nChan+1   nasion reference; carries no data (see below)
+%   rhoFun   - function handle colat -> native radial distance. Callers that
+%              rasterise (di_view_Sph_voronoi) need rhoFun(pi/2) to convert
+%              between native and normalised radii.
 %
 % NOTE: each projection has its own radial scale -- at the equator rho is
 % 1, pi/2, 1 and sqrt(2) respectively. coord_2d is therefore NOT comparable
@@ -63,12 +66,13 @@ el  = deg2rad(sphPhi(:)');
 colat = (pi/2) - el;
 
 switch projectionType
-    case 'orthographic',         rho = sin(colat);
-    case 'azimuthalEquidistant', rho = colat;
-    case 'azimuthalConformal',   rho = tan(colat ./ 2);
-    case 'azimuthalEqualArea',   rho = sqrt(2) * sin(colat ./ 2);
+    case 'orthographic',         rhoFun = @(c) sin(c);
+    case 'azimuthalEquidistant', rhoFun = @(c) c;
+    case 'azimuthalConformal',   rhoFun = @(c) tan(c ./ 2);
+    case 'azimuthalEqualArea',   rhoFun = @(c) sqrt(2) * sin(c ./ 2);
     otherwise, error('\\ unhandled projection: %s', projectionType)
 end
+rho = rhoFun(colat);
 [xCoord, yCoord] = pol2cart(az, radius * rho);
 
 % equidistant, conformal and equal-area are monotonic in colat, so they
