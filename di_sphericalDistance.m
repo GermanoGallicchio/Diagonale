@@ -61,7 +61,7 @@ end
 
 
 %% figure
-if di_cfg.analysis.figFlag
+if isfield(di_cfg, 'analysis') && isfield(di_cfg.analysis, 'figFlag') && di_cfg.analysis.figFlag
 
     if nChan > 2
         % get distance threshold for adjacency
