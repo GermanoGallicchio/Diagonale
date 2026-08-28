@@ -63,16 +63,21 @@ function results = di_inference(di_cfg,results)
 %                   .mode.thresholds.*          - maxT thresholds per metric
 %           for permutation, AJIVE
 %                   .mode       not yet implemented
-%           for bootstrap, empiricalFeature_inferenceFeature
-%                   .feature.BR_rob             - bootstrap ratio (robust)
+%           for bootstrap, bootstrapStability + feature
+%                   .feature.BR                 - bootstrap ratio (observed / bootstrap SD)
+%                   .feature.BR_rob             - robust bootstrap ratio (observed / bootstrap MAD-based SD)
 %                   .feature.CIlo               - lower 95% confidence interval
 %                   .feature.CIup               - upper 95% confidence interval
 %           for bootstrap, PLS_SVD
 %                   stored in .simulated.bootstrapStability.loadings.inference:
 %                   .U_sd, .V_sd                - standard deviation of loadings
 %                   .U_BR, .V_BR                - bootstrap ratio (observed / bootstrap SD) (stability estimate, NOT an inferential statistic - see NOTE ON INTERPRETATION in the bootstrapStability + latent case below)
+%                   .U_madSD, .V_madSD          - robust bootstrap SD (1.4826 * MAD)
+%                   .U_BR_rob, .V_BR_rob        - robust bootstrap ratio (observed / robust bootstrap SD)
 %                   .U_95CIlo, .U_95CIup        - lower/upper 95% confidence interval for U loadings
 %                   .V_95CIlo, .V_95CIup        - lower/upper 95% confidence interval for V loadings
+%           BR and BR_rob are z-like ratios centred on 0 and differ only in
+%           the robustness of their denominator.
 %           for bootstrap, AJIVE
 %                   .mode       not yet implemented
 %
@@ -248,8 +253,10 @@ switch key
         statVal_obs = results.observed.statVal;  % [1 x pX]
         boot_values = results.simulated.bootstrapStability.values;  % [nIterations x pX]
         
-        % Compute bias-corrected robust estimates and confidence intervals
-        % Bootstrap Robust (BR): ratio of bootstrap median to observed
+        % Compute bootstrap ratios and confidence intervals
+        % BR and BR_rob are z-like ratios centred on 0; only the denominator differs.
+        eps0 = 1e-10;
+        BR = nan(1, size(statVal_obs, 2));
         BR_rob = nan(1, size(statVal_obs, 2));
         CIlo = nan(1, size(statVal_obs, 2));
         CIup = nan(1, size(statVal_obs, 2));
@@ -258,15 +265,13 @@ switch key
             boot_dist = boot_values(:, colIdx);
             val_obs = statVal_obs(colIdx);
             
-            % Robust estimate: bootstrap median relative to observed
-            boot_median = median(boot_dist);
-            % Safeguard: if observed value is very close to zero, ratio becomes unstable
-            if abs(val_obs) > 1e-10  % threshold for "effectively nonzero"
-                BR_rob(1, colIdx) = boot_median / val_obs;  % ratio: if ~1, stable under resampling
-            else
-                % For near-zero observed values, use difference instead
-                BR_rob(1, colIdx) = boot_median - val_obs;
-                warning(['Feature ' num2str(colIdx) ' has near-zero observed value; using difference for BR_rob']);
+            boot_sd = std(boot_dist);
+            boot_madSD = 1.4826 * median(abs(boot_dist - median(boot_dist)));
+            if boot_sd > eps0
+                BR(1, colIdx) = val_obs / boot_sd;
+            end
+            if boot_madSD > eps0
+                BR_rob(1, colIdx) = val_obs / boot_madSD;
             end
             
             % 95% confidence interval from bootstrap distribution
@@ -275,6 +280,7 @@ switch key
         end
         
         % Store inference results in unified structure
+        results.inference.feature.BR = BR;
         results.inference.feature.BR_rob = BR_rob;
         results.inference.feature.CIlo = CIlo;
         results.inference.feature.CIup = CIup;
@@ -343,6 +349,19 @@ switch key
         V_BR(V_valid) = V_obs(V_valid) ./ V_sd(V_valid);
         results.simulated.bootstrapStability.loadings.inference.U_BR = U_BR;
         results.simulated.bootstrapStability.loadings.inference.V_BR = V_BR;
+
+        U_madSD = 1.4826 * median(abs(U_boot - median(U_boot, 3)), 3);
+        V_madSD = 1.4826 * median(abs(V_boot - median(V_boot, 3)), 3);
+        U_BR_rob = nan(size(U_obs));
+        V_BR_rob = nan(size(V_obs));
+        U_madSD_valid = U_madSD > eps0;
+        V_madSD_valid = V_madSD > eps0;
+        U_BR_rob(U_madSD_valid) = U_obs(U_madSD_valid) ./ U_madSD(U_madSD_valid);
+        V_BR_rob(V_madSD_valid) = V_obs(V_madSD_valid) ./ V_madSD(V_madSD_valid);
+        results.simulated.bootstrapStability.loadings.inference.U_madSD = U_madSD;
+        results.simulated.bootstrapStability.loadings.inference.V_madSD = V_madSD;
+        results.simulated.bootstrapStability.loadings.inference.U_BR_rob = U_BR_rob;
+        results.simulated.bootstrapStability.loadings.inference.V_BR_rob = V_BR_rob;
         
         % STEP 4: Compute bootstrap confidence intervals (percentile method)
         % 95% CI = [2.5th percentile, 97.5th percentile] across bootstrap distribution
