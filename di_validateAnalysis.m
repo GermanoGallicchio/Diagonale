@@ -21,7 +21,7 @@ compatibilityRules = struct( ...
 % make sure the dimensions are validated prior to this function
 dimensionValidation = false; % initialize it false
 if isfield(di_cfg,'validation')
-    if isfield(di_cfg.validation,'dimensions')
+    if isfield(di_cfg.validation,'featureDims')
         dimensionValidation = true;
     end
 end
