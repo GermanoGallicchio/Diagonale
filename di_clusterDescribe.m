@@ -84,9 +84,11 @@ switch key
     case 'bootstrapStability + feature'
         % Descriptive cluster forming
         % Form clusters from stable features in bootstrap analysis.
-        mask_BRrob = logical(abs(results.inference.feature.BR_rob) > 2);
+        % BR_rob is z-like and centred on 0, so |BR_rob| > 2 selects stable features;
+        % negate it because di_clusterForming expects p-like values tested with p < threshold.
+        mask_BRrob = abs(results.inference.feature.BR_rob) > 2;
         % apply ignore_col
-        mask_BRrob = mask_BRrob .* ~di_cfg.analysis.ignore_col;
+        mask_BRrob = mask_BRrob & ~logical(di_cfg.analysis.ignore_col);
         % di_clusterForming expects p-like values and uses p < threshold;
         % invert stability mask so stable points behave like "significant" points.
         [clusterMembership, clustIDList, metrics] = di_clusterForming(di_cfg, clusterStatVal, ~mask_BRrob);
