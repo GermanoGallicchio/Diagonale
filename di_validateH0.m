@@ -40,7 +40,9 @@ switch key
             error(['\\ Design [' key '] only supports permuteUnit = ''withinObservation''.'])
         end
 
-    case '1  1' % Mixed design: both types are allowed — no further check needed
+    case '1  1' % Mixed design
+        % TO DO
+        
 end
 
 
