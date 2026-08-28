@@ -6,7 +6,7 @@ function results = di_analyze(di_cfg, Y, X)
 %
 % INPUT:
 %   di_cfg      - struct with validated analysis configuration containing:
-%                 .analysis.nIterations, .analysis.dataStruct, .dimensions
+%                 .analysis.nIterations, .analysis.dataStruct, .featureDims
 %                 .analysis.inferenceLevel ('feature', 'cluster', or 'latent')
 %   Y           - Primary data matrix (m x pData) where m = observations
 %   X           - Design/response matrix (m x pDesign). Content is flexible and analysis-dependent:
@@ -42,7 +42,7 @@ function results = di_analyze(di_cfg, Y, X)
 dimensionValidation = false; % initialize it as false
 analysisValidation  = false; % initialize it as false
 if isfield(di_cfg,'validation')
-    if isfield(di_cfg.validation,'dimensions')
+    if isfield(di_cfg.validation,'featureDims')
         dimensionValidation = true;
     end
     if isfield(di_cfg.validation,'analysis')
