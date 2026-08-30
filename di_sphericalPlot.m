@@ -9,7 +9,12 @@ function di_sphericalPlot(di_cfg, sphValues, params)
 %
 %   params - struct with optional fields:
 %     projectionType, drawLines, lineWidth, lineCol, chanMarkerSize,
-%     chanMarkerChar, chanLbl, colBar, colMap, cLim
+%     chanMarkerChar, chanMarkerEdgeColor, chanLbl, colBar, colMap, cLim
+%     connectOrder - vector of channel indices; if given, a path is drawn
+%                    through the channels in that order, BENEATH the markers
+%                    and head furniture
+%     connectColor - colour of that path                 (default lineCol)
+%     connectWidth - width of that path                  (default lineWidth)
 
 
 % Extract dimension metadata
@@ -79,6 +84,30 @@ else
     chanMarkerChar = 'o';
 end
 
+if any(strcmp(fieldNames,'chanMarkerEdgeColor'))
+    chanMarkerEdgeColor = params.chanMarkerEdgeColor;
+else
+    chanMarkerEdgeColor = lineCol(1,1:3);
+end
+
+if any(strcmp(fieldNames,'connectOrder'))
+    connectOrder = params.connectOrder(:)';
+else
+    connectOrder = [];
+end
+
+if any(strcmp(fieldNames,'connectColor'))
+    connectColor = params.connectColor;
+else
+    connectColor = lineCol(1,1:3);
+end
+
+if any(strcmp(fieldNames,'connectWidth'))
+    connectWidth = params.connectWidth;
+else
+    connectWidth = lineWidth;
+end
+
 if any(strcmp(fieldNames,'chanLbl'))
     chanLbl = params.chanLbl;
 else
@@ -137,13 +166,22 @@ idx = max(1, min(size(colMap, 1), idx));  % clip to colormap range
 
 %% figure
 
+% connecting path through channels (drawn first so it sits behind everything;
+% pushed to the very bottom again below, after the head furniture)
+connectHandle = gobjects(0);
+if ~isempty(connectOrder)
+    connectHandle = plot(coord_2d(connectOrder,1), coord_2d(connectOrder,2), '-', ...
+        'Color', connectColor, 'LineWidth', connectWidth);
+    hold on
+end
+
 % channel markers
 for chanIdx = 1:nChan
     plot(coord_2d(chanIdx,1), coord_2d(chanIdx,2), ...
         chanMarkerChar, ...
         'MarkerSize', chanMarkerSize, ...
         'MarkerFaceColor',colMap(idx(chanIdx),:), ...
-        'MarkerEdgeColor',lineCol(1,1:3));
+        'MarkerEdgeColor',chanMarkerEdgeColor);
     hold on
 end
 
@@ -193,6 +231,11 @@ if drawLines
     uistack(lnln,"bottom")
     uistack(rnln,"bottom")
 
+end
+
+% keep the connecting path beneath the markers and the head furniture
+if ~isempty(connectHandle)
+    uistack(connectHandle,'bottom')
 end
 
 
