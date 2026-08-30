@@ -99,8 +99,7 @@ function results = di_analysis_OLS(di_cfg, Y_orig, X_orig, rowIdx)
 %   results.simulated   subfield containing the simulated values
 %   results.simulated.permutationH0.statVal         [nIterations x pY]  null distribution of beta
 %   results.simulated.permutationH0.clusterMetrics  [1 x nIterations] struct array
-%   results.simulated.bootstrapStability.values     [nIterations x pY]  bootstrap betas
-% TO DO: perhaps change "results.simulated.bootstrapStability.values" to "results.simulated.bootstrapStability.statVal" for consistency in terminology
+%   results.simulated.bootstrapStability.statVal    [nIterations x pY]  bootstrap betas
 %
 % NOTES:
 %   - pVal_parametric and df_parametric are observed-data companions from tVal.
@@ -128,10 +127,9 @@ if isfield(di_cfg.analysis, 'OLS') && isfield(di_cfg.analysis.OLS, 'ranked')
 end
 
 % variance type
-varianceType = 'unequal';
-if isfield(di_cfg.analysis, 'OLS') && isfield(di_cfg.analysis.OLS, 'varianceType')
-    varianceType = di_cfg.analysis.OLS.varianceType;
-end
+% (resolved and defaulted by di_validateOLS, called from di_analyze before
+% this function is reached)
+varianceType = di_cfg.analysis.OLS.varianceType;
 
 % standardize
 standardize = false;
@@ -232,9 +230,6 @@ end
 % options consistency warnings
 if ~isequal(designCode, [0 0]) && ranked
     warning('Diagonale:OLS', 'ranked is only used for design [0 0]; ignored here');
-end
-if ~isequal(designCode, [0 1]) && ~strcmp(varianceType, 'unequal')
-    warning('Diagonale:OLS', 'varianceType is only used for design [0 1]; ignored here');
 end
 
 %% build subject dummies for matrix X 
@@ -487,7 +482,7 @@ switch analysisObjective
             results.simulated.permutationH0.statVal = statVal_perm; % [nIterations x pY]
         end
     case 'bootstrapStability'
-        results.simulated.bootstrapStability.values = statVal_boot; % [nIterations x pY]
+        results.simulated.bootstrapStability.statVal = statVal_boot; % [nIterations x pY]
 end
 
 %% validate output
@@ -537,11 +532,11 @@ switch analysisObjective
             end
         end
     case 'bootstrapStability'
-        if size(results.simulated.bootstrapStability.values, 1) ~= nIterations
-            error('bootstrapStability.values does not have nIterations rows');
+        if size(results.simulated.bootstrapStability.statVal, 1) ~= nIterations
+            error('bootstrapStability.statVal does not have nIterations rows');
         end
-        if size(results.simulated.bootstrapStability.values, 2) ~= pY
-            error('bootstrapStability.values does not have pY columns');
+        if size(results.simulated.bootstrapStability.statVal, 2) ~= pY
+            error('bootstrapStability.statVal does not have pY columns');
         end
 end
 
