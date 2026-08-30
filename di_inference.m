@@ -41,7 +41,7 @@ function results = di_inference(di_cfg,results)
 %                       .clusterMetrics (1 x nIterations) struct array
 %                       .modes          (for PLS_SVD) mode-level null metrics
 %                   .bootstrapStability
-%                       .values         (nIterations x pX) bootstrap samples
+%                       .statVal        (nIterations x pX) bootstrap samples
 %                       .loadings       (for PLS_SVD) bootstrap loading samples
 %                 .PLS_SVD            (for PLS_SVD analyses only)
 %                   .loadings.U_obs, .V_obs, .XU_obs, .YV_obs
@@ -251,7 +251,7 @@ switch key
 
         % Get observed statistics and bootstrap distribution from unified structure
         statVal_obs = results.observed.statVal;  % [1 x pX]
-        boot_values = results.simulated.bootstrapStability.values;  % [nIterations x pX]
+        boot_values = results.simulated.bootstrapStability.statVal;  % [nIterations x pX]
         
         % Compute bootstrap ratios and confidence intervals
         % BR and BR_rob are z-like ratios centred on 0; only the denominator differs.
