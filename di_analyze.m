@@ -175,6 +175,12 @@ designCode = di_parseDesign(di_cfg,X);
 % keep a copy of the designCode in the analysis
 di_cfg.analysis.designCode = designCode;
 
+%% validate OLS parameters
+% runs for both objectives (unlike di_validateH0, which is gated to
+% permutationH0testing)
+
+di_cfg = di_validateOLS(di_cfg);
+
 %% validate null hypothesis
 % if a null hypothesis is tested
 
