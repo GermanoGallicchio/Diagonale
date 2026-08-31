@@ -239,7 +239,7 @@ for itIdx = 1:nIterations
     if di_cfg.analysis.figFlag  &&  itIdx==1
         figure()
         imagesc(Yz)
-        title('structure of X at itIdx==1 after preprocessing')
+        title('structure of Y (Yz) at itIdx==1 after preprocessing')
         %axis equal
         box off
         axis off
@@ -259,7 +259,7 @@ for itIdx = 1:nIterations
     nModes = size(S,1);
 
     % loadings sign and direction alignment (only for bootstrap)
-    if strcmp(analysisObjective, 'bootstrapStability') && nModes > 1
+    if strcmp(analysisObjective, 'bootstrapStability')
         if itIdx == 1 % reference loadings defined locally in this section.
             U_ref = U;
             V_ref = V;
@@ -285,11 +285,16 @@ for itIdx = 1:nIterations
             % subsequent iterations, match the signs to that of the reference
             % loading. SVD sign ambiguity is coupled: to maintain the same dot-product,
             % if U and V need flipping, both need to flip. under no case, only one is flipped
+            % note: sign alignment is needed for ANY number of modes: a
+            % single mode can still flip sign across bootstrap resamples
             [U, V] = di_signAlign(U, V, U_ref, V_ref);
 
             % for bootstrap with nModes>1, we also need to match direction across iterations.
             % This can easily be done through another SVD ("procrustes" rotation... terrible name)
-            [U, V] = di_procrustesRotate(U_ref, V_ref, U, V);
+            % (rotation is meaningless for a single mode, hence the gate)
+            if nModes > 1
+                [U, V] = di_procrustesRotate(U_ref, V_ref, U, V);
+            end
 
         end
     end
