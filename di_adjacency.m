@@ -43,10 +43,21 @@ dimTypes = cellfun(@(k) di_cfg.featureDims.(k).type, dimKeys, 'UniformOutput', f
 dimSizes = cellfun(@(k) length(di_cfg.featureDims.(k).vec), dimKeys);
 nDims = numel(dimKeys);
 
+% ind2sub requires a size vector with >= 2 elements; pad with a trailing
+% singleton so 1-D feature spaces work (subscripts are unaffected)
+dimSizes_sub = dimSizes(:)';
+if isscalar(dimSizes_sub)
+    dimSizes_sub = [dimSizes_sub 1];
+end
+
 % Identify dimension types
-contIdx = find(strcmp(dimTypes, 'continuous'));
-sphIdx = find(strcmp(dimTypes, 'spherical'));
-catIdx = find(strcmp(dimTypes, 'categorical'));
+% note: force row vectors. find() on these (column) cell arrays returns
+% column vectors, and "for v = columnVector" iterates ONCE with the whole
+% vector (MATLAB for-loops iterate over columns), silently skipping
+% dimensions after the first
+contIdx = find(strcmp(dimTypes, 'continuous'));  contIdx = contIdx(:)';
+sphIdx  = find(strcmp(dimTypes, 'spherical'));   sphIdx  = sphIdx(:)';
+catIdx  = find(strcmp(dimTypes, 'categorical')); catIdx  = catIdx(:)';
 
 % sanity check categorical dimensions (not supported in adjacency)
 % TO DO in future i might allow adjacency for all non-categorical 
@@ -118,7 +129,7 @@ switch sparseApproach
 
             % find the coordinates in the multidimensional grid for point pIdx
             pIdx_subs = cell(1, nDims);
-            [pIdx_subs{:}] = ind2sub(dimSizes, pIdx);
+            [pIdx_subs{:}] = ind2sub(dimSizes_sub, pIdx);
 
             % adjacency along all continuous dimensions, if present
             % Euclidean distance between indices (not physical units)
@@ -159,13 +170,12 @@ switch sparseApproach
         clear adjMatrix_logical % to save memory
 
     case 'fromIdx'
-keyboard
         a_idx = [];
         b_idx = [];
 
         for pIdx = 1:pX
             pIdx_subs = cell(1, nDims);
-            [pIdx_subs{:}] = ind2sub(dimSizes, pIdx);
+            [pIdx_subs{:}] = ind2sub(dimSizes_sub, pIdx);
 
             % Euclidean criterion across continuous dimensions
             if isempty(contIdx)
@@ -181,7 +191,9 @@ keyboard
             % angular criterion for spherical dimension (if present)
             if ~isempty(sphIdx)
                 chanNeighIdx = find(sphericalDistanceMatrix(pIdx_subs{sphIdx(1)}, :) <= distance_spherical_radians);
-                criterion2 = ismember(sphGrid, chanNeighIdx);
+                % same channel-membership criterion as the fromLogical branch
+                % (sphGrid no longer exists; dimGrids holds the channel grid)
+                criterion2 = ismember(dimGrids{sphIdx(1)}, chanNeighIdx);
             else
                 criterion2 = true(size(dimGrids{1}));
             end
