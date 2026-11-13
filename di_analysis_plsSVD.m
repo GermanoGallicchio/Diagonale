@@ -328,15 +328,16 @@ for itIdx = 1:nIterations
     YV = Yz * V;    % Y latent scores (one per mode)
 
     % metrics: correlation of each variable with its own latent scores
-    % (structure correlations). the loadings say what weight a variable
-    % receives when the latent variable is built; these say how strongly the
-    % variable tracks it once built. the two differ whenever the variables
-    % within a block are correlated with each other.
-    % computed here, after the alignment above, so they take the same
-    % orientation as the loadings and need no alignment of their own
+    % (structure correlations). the loadings say how much weight a variable
+    % receives in building the latent variable, these say how strongly the
+    % variable correlates with it once built. the two differ when the
+    % variables within a block are correlated with each other.
+    % computed here, after the alignment above, so they inherit the same
+    % orientation as the loadings and need no separate alignment
     U_corr = corr(Xz, XU);
-    % ignored features were set to zero above, so they have no variance and
-    % no defined correlation: compute the active ones, leave the rest NaN
+    % ignored features were set to zero above, therefore they have no
+    % variance and no defined correlation: compute the active ones and leave
+    % the rest NaN
     activeCol = ~logical(di_cfg.analysis.ignore_col);
     V_corr = nan(size(Y_orig,2), nModes);
     V_corr(activeCol,:) = corr(Yz(:,activeCol), YV);
