@@ -185,7 +185,15 @@ if isClusterLevel
         end
     end
 elseif isfield(di_cfg.analysis,'clusterParams')
-    warning('\\ di_cfg.analysis.clusterParams provided but inferenceLevel is not ''cluster''. I will ignore di_cfg.analysis.clusterParams')
+    if strcmp(di_cfg.analysis.inferenceLevel, 'feature')
+        % legitimate, supported pattern: after feature-level inference the
+        % clusterParams drive DESCRIPTIVE post-hoc clustering
+        % (di_clusterDescribe) and the cluster report; they play no role in
+        % the inference itself
+        disp('\\ di_cfg.analysis.clusterParams provided with feature-level inference: used for descriptive post-hoc clusters and the cluster report only (inference stays feature-level)')
+    else
+        warning('\\ di_cfg.analysis.clusterParams provided but inferenceLevel is ''%s'': not used (descriptive post-hoc clustering exists only for feature-level inference)', di_cfg.analysis.inferenceLevel)
+    end
 end
 
 % --- feature-level multiple comparison correction specific ---
@@ -208,6 +216,53 @@ if isFeatureLevel && isPermutation
 else
     if isfield(di_cfg.analysis,'FDR_dimensions')
         error('di_cfg.analysis.FDR_dimensions is only valid for feature-level inference with permutation analyses with di_cfg.analysis.correction = ''FDR''')
+    end
+end
+
+% --- maxT options (currently: feature-level step-down) ---
+% di_cfg.analysis.maxT is a sub-struct of maxT options. Currently supported:
+%   .stepDown (logical) - Westfall-Young step-down maxT (feature level only)
+if isfield(di_cfg.analysis,'maxT')
+    if ~isstruct(di_cfg.analysis.maxT)
+        error('\\ di_cfg.analysis.maxT must be a struct (e.g., di_cfg.analysis.maxT.stepDown = true)')
+    end
+    if ~isPermutation
+        error('\\ di_cfg.analysis.maxT is only valid for di_cfg.analysis.objective = ''permutationH0testing''')
+    end
+    if isfield(di_cfg.analysis.maxT,'stepDown')
+        stepDownVal = di_cfg.analysis.maxT.stepDown;
+        if ~isscalar(stepDownVal) || ~(islogical(stepDownVal) || (isnumeric(stepDownVal) && any(stepDownVal==[0 1])))
+            error('\\ di_cfg.analysis.maxT.stepDown must be a logical scalar (true/false)')
+        end
+        di_cfg.analysis.maxT.stepDown = logical(stepDownVal);
+        if di_cfg.analysis.maxT.stepDown
+            if ~isFeatureLevel
+                if isClusterLevel
+                    error(['\\ di_cfg.analysis.maxT.stepDown = true requires di_cfg.analysis.inferenceLevel = ''feature''. ' ...
+                        'Step-down maxT is undefined at the cluster level: cluster identities do not persist across ' ...
+                        'permutations, so there is no coherent way to remove the top cluster from the family at each step.'])
+                else % latent
+                    error(['\\ di_cfg.analysis.maxT.stepDown = true requires di_cfg.analysis.inferenceLevel = ''feature''. ' ...
+                        'Step-down maxT across latent modes is not valid without deflation: when mode 1 carries real ' ...
+                        'signal, row permutation does not produce a valid null for the later modes (anti-conservative).'])
+                end
+            end
+            if ~strcmp(di_cfg.analysis.correction,'maxT')
+                error('\\ di_cfg.analysis.maxT.stepDown = true requires di_cfg.analysis.correction = ''maxT''')
+            end
+        else
+            if ~isFeatureLevel
+                warning('\\ di_cfg.analysis.maxT.stepDown = false has no effect for inferenceLevel = ''%s''. I will ignore it.', di_cfg.analysis.inferenceLevel)
+            end
+        end
+    end
+end
+
+% default: single-step maxT at the feature level when stepDown not provided
+if isFeatureLevel && isPermutation && strcmp(di_cfg.analysis.correction,'maxT')
+    if ~isfield(di_cfg.analysis,'maxT') || ~isfield(di_cfg.analysis.maxT,'stepDown')
+        di_cfg.analysis.maxT.stepDown = false;
+        warning('\\ di_cfg.analysis.maxT.stepDown not provided. I am using logical 0 (single-step maxT) by default. Set to true for step-down maxT (Westfall & Young, 1993; never less powerful).')
     end
 end
   
