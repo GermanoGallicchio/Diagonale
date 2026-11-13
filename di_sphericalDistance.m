@@ -46,6 +46,14 @@ theta = deg2rad(sphCoord.sphTheta(:)');
 phi   = deg2rad(sphCoord.sphPhi(:)');
 
 % Compute angular distance matrix
+% Great-circle (geodesic) distance via the SPHERICAL LAW OF COSINES:
+%   d = acos( sin(phiA)sin(phiB) + cos(phiA)cos(phiB)cos(thetaA - thetaB) )
+% where phi is elevation (latitude) and theta azimuth (longitude), both in
+% radians. The result is the angle (radians) between the two sites as seen
+% from the sphere's centre; multiply by the radius for arc length. Angle
+% convention matches EEGLAB chanlocs sph_theta / sph_phi (degrees on input,
+% converted above). The haversine refinement is unnecessary here because
+% inter-electrode angles are large (no catastrophic cancellation).
 sphericalDistanceMatrix = zeros(nChan, nChan);
 for chanAIdx = 1:nChan
     for chanBIdx = 1:nChan
