@@ -76,6 +76,10 @@ function results = di_inference(di_cfg,results)
 %                   .U_BR_rob, .V_BR_rob        - robust bootstrap ratio (observed / robust bootstrap SD)
 %                   .U_95CIlo, .U_95CIup        - lower/upper 95% confidence interval for U loadings
 %                   .V_95CIlo, .V_95CIup        - lower/upper 95% confidence interval for V loadings
+%                   .U_corr_zsd, .V_corr_zsd    - SD of the structure correlations on the atanh scale
+%                   .U_corr_BR, .V_corr_BR      - bootstrap ratio of the structure correlations, on the atanh scale (not mapped back)
+%                   .U_corr_95CIlo, .U_corr_95CIup - lower/upper 95% confidence interval for X-side structure correlations
+%                   .V_corr_95CIlo, .V_corr_95CIup - lower/upper 95% confidence interval for Y-side structure correlations
 %           BR and BR_rob are z-like ratios centred on 0 and differ only in
 %           the robustness of their denominator.
 %           for bootstrap, AJIVE
@@ -266,6 +270,9 @@ switch key
             val_obs = statVal_obs(colIdx);
             
             boot_sd = std(boot_dist);
+            % 1.4826 = 1/norminv(3/4): scales the median absolute deviation
+            % (MAD) so it estimates the SD consistently under normality,
+            % giving a robust SD that outliers cannot inflate
             boot_madSD = 1.4826 * median(abs(boot_dist - median(boot_dist)));
             if boot_sd > eps0
                 BR(1, colIdx) = val_obs / boot_sd;
@@ -344,12 +351,29 @@ switch key
         % tiny number (potentially zero)
         U_valid = abs(U_sd) > eps0;
         V_valid = abs(V_sd) > eps0;
+        % loadings below tolerance have no meaningful variation across
+        % iterations to divide by, so no bootstrap ratio can be computed for
+        % them. warn instead of returning NaN silently: usually this means
+        % the loading is fixed by the geometry of the problem rather than
+        % estimated from the data (for example a block with a single
+        % variable, whose loading is always 1)
+        % features excluded via ignore_col have a zero loading in every
+        % iteration by construction, so they are not counted here
+        V_counted = ~repmat(logical(di_cfg.analysis.ignore_col(:)), 1, size(V_sd,2));
+        nFlat = sum(~U_valid(:)) + sum(~V_valid(V_counted));
+        if nFlat > 0
+            warning(['di_inference: ' num2str(nFlat) ' of ' ...
+                num2str(numel(U_valid) + sum(V_counted(:))) ' loadings varied by less than ' ...
+                num2str(eps0) ' across iterations; their bootstrap ratios are left as NaN'])
+        end
         % compute BR only for valid loadings
         U_BR(U_valid) = U_obs(U_valid) ./ U_sd(U_valid);
         V_BR(V_valid) = V_obs(V_valid) ./ V_sd(V_valid);
         results.simulated.bootstrapStability.loadings.inference.U_BR = U_BR;
         results.simulated.bootstrapStability.loadings.inference.V_BR = V_BR;
 
+        % 1.4826 = 1/norminv(3/4): MAD-to-SD consistency factor under
+        % normality (robust SD; see the note in the feature branch above)
         U_madSD = 1.4826 * median(abs(U_boot - median(U_boot, 3)), 3);
         V_madSD = 1.4826 * median(abs(V_boot - median(V_boot, 3)), 3);
         U_BR_rob = nan(size(U_obs));
@@ -373,6 +397,43 @@ switch key
         results.simulated.bootstrapStability.loadings.inference.U_95CIup = U_95CIup;
         results.simulated.bootstrapStability.loadings.inference.V_95CIlo = V_95CIlo;
         results.simulated.bootstrapStability.loadings.inference.V_95CIup = V_95CIup;
+
+        % STEP 5: Compute structure correlation metrics
+        % correlations are bounded in [-1 1] and their bootstrap
+        % distribution is skewed near those bounds, so the ratio is formed
+        % on the atanh (Fisher z) scale, where the distribution is close to
+        % normal. the ratio stays on that scale: mapping it back through
+        % tanh would push everything above about 3 into values that cannot
+        % be told apart from 1.
+        U_corr_obs  = results.PLS_SVD.loadings.U_corr_obs;
+        V_corr_obs  = results.PLS_SVD.loadings.V_corr_obs;
+        U_corr_boot = results.simulated.bootstrapStability.loadings.U_corr_boot;
+        V_corr_boot = results.simulated.bootstrapStability.loadings.V_corr_boot;
+
+        U_corr_zsd = std(atanh(U_corr_boot), 0, 3);
+        V_corr_zsd = std(atanh(V_corr_boot), 0, 3);
+        U_corr_BR = nan(size(U_corr_obs));
+        V_corr_BR = nan(size(V_corr_obs));
+        % a correlation of exactly +/-1 is infinite on the atanh scale. this
+        % happens by construction when a block holds a single variable,
+        % whose latent scores are that variable up to sign. ignored features
+        % are NaN here for the same reason they are NaN upstream
+        U_corr_valid = isfinite(U_corr_zsd) & U_corr_zsd > eps0 & isfinite(atanh(U_corr_obs));
+        V_corr_valid = isfinite(V_corr_zsd) & V_corr_zsd > eps0 & isfinite(atanh(V_corr_obs));
+        U_corr_BR(U_corr_valid) = atanh(U_corr_obs(U_corr_valid)) ./ U_corr_zsd(U_corr_valid);
+        V_corr_BR(V_corr_valid) = atanh(V_corr_obs(V_corr_valid)) ./ V_corr_zsd(V_corr_valid);
+        results.simulated.bootstrapStability.loadings.inference.U_corr_zsd = U_corr_zsd;
+        results.simulated.bootstrapStability.loadings.inference.V_corr_zsd = V_corr_zsd;
+        results.simulated.bootstrapStability.loadings.inference.U_corr_BR  = U_corr_BR;
+        results.simulated.bootstrapStability.loadings.inference.V_corr_BR  = V_corr_BR;
+
+        % percentiles are unchanged by a monotone transform, so taking them
+        % on the atanh scale and mapping back through tanh would return
+        % exactly these numbers: compute them on the correlations directly
+        results.simulated.bootstrapStability.loadings.inference.U_corr_95CIlo = prctile(U_corr_boot, 2.5, 3);
+        results.simulated.bootstrapStability.loadings.inference.U_corr_95CIup = prctile(U_corr_boot, 97.5, 3);
+        results.simulated.bootstrapStability.loadings.inference.V_corr_95CIlo = prctile(V_corr_boot, 2.5, 3);
+        results.simulated.bootstrapStability.loadings.inference.V_corr_95CIup = prctile(V_corr_boot, 97.5, 3);
 
     otherwise
         error('unsupported analysis objective/inferenceLevel combination: %s', key)
