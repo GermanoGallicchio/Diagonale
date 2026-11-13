@@ -39,8 +39,20 @@ function [rowIdx, di_cfg] = di_reorderRowsGenerate(di_cfg)
 %        'withinObservation'
 %    This function only determines row reordering. 
 % 
-%    Subject centering is configured elsewhere (di_cfg.analysis.subjectCentering) 
+%    Subject centering is configured elsewhere (di_cfg.analysis.subjectCentering)
 %    and applied downstream for non-OLS analysis (e.g., PLS-SVD).
+%
+%    STATISTICAL RATIONALE: permutation tests are valid when, under the
+%    null hypothesis, the rows being shuffled are EXCHANGEABLE -- their
+%    joint distribution is unchanged by reordering. The design dictates
+%    what may be shuffled: with independent observations
+%    ('wholeObservation') any observation could equally have carried any
+%    predictor value; with repeated measures ('withinObservation') only the
+%    condition labels WITHIN a subject are exchangeable (subjects differ
+%    systematically, so rows must never cross subjects). Choosing the wrong
+%    unit breaks exchangeability and with it the validity of the test.
+%    References: Nichols & Holmes (2002), Hum Brain Mapp 15:1-25;
+%    Anderson & Robinson (2001), Aust N Z J Stat 43:75-88.
 %
 % 3. BOOTSTRAP is always done by resamples with replacement full observation
 % units (eg, a subject with all its conditions)
@@ -65,11 +77,21 @@ end
 dataStruct = di_cfg.analysis.dataStruct;
 nIterations = double(di_cfg.analysis.nIterations);
 nRow = height(dataStruct);
-permuteUnit = di_cfg.analysis.permuteUnit;
 
-% two permutation mechanics
-permute_WithinObservation_logic = strcmp(permuteUnit, 'withinObservation');
-permute_WholeObservation_logic  = strcmp(permuteUnit, 'wholeObservation');
+% permuteUnit is a permutation-only setting: read it only when permuting.
+% Bootstrap resampling never uses it, and di_validateAnalysis correctly does
+% not require it under bootstrapStability, so reading it unconditionally
+% here made bootstrap crash for configs that followed the validators.
+if strcmp(char(di_cfg.analysis.objective), 'permutationH0testing')
+    permuteUnit = di_cfg.analysis.permuteUnit;
+    % two permutation mechanics
+    permute_WithinObservation_logic = strcmp(permuteUnit, 'withinObservation');
+    permute_WholeObservation_logic  = strcmp(permuteUnit, 'wholeObservation');
+else
+    permuteUnit = '';
+    permute_WithinObservation_logic = false;
+    permute_WholeObservation_logic  = false;
+end
 
 %% set random seed
 rng(double(di_cfg.analysis.randomSeed), 'twister');
