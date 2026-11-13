@@ -332,7 +332,7 @@ for itIdx = 1:nIterations
     % receives in building the latent variable, these say how strongly the
     % variable correlates with it once built. the two differ when the
     % variables within a block are correlated with each other.
-    % computed here, after the alignment above, so they inherit the same
+    % computed here, after the alignment above, so they have the same
     % orientation as the loadings and need no separate alignment
     U_corr = corr(Xz, XU);
     % ignored features were set to zero above, therefore they have no
