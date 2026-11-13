@@ -405,7 +405,7 @@ switch key
         % formed on the atanh (Fisher z) scale, where that distribution is
         % close to normal. the ratio is left on that scale: mapping it back
         % through tanh would compress everything above about 3 into values
-        % that cannot be distinguished from 1.
+        % that are all very close to 1.
         U_corr_obs  = results.PLS_SVD.loadings.U_corr_obs;
         V_corr_obs  = results.PLS_SVD.loadings.V_corr_obs;
         U_corr_boot = results.simulated.bootstrapStability.loadings.U_corr_boot;
@@ -418,7 +418,7 @@ switch key
         % a correlation of exactly +/-1 is infinite on the atanh scale. this
         % happens when a block holds a single variable, whose latent scores
         % are that variable up to sign. ignored features are NaN here for the
-        % same reason they are NaN upstream
+        % same reason they are NaN in the loadings
         U_corr_valid = isfinite(U_corr_zsd) & U_corr_zsd > eps0 & isfinite(atanh(U_corr_obs));
         V_corr_valid = isfinite(V_corr_zsd) & V_corr_zsd > eps0 & isfinite(atanh(V_corr_obs));
         U_corr_BR(U_corr_valid) = atanh(U_corr_obs(U_corr_valid)) ./ U_corr_zsd(U_corr_valid);
