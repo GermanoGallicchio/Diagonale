@@ -41,8 +41,14 @@ switch key
         end
 
     case '1  1' % Mixed design
-        % TO DO
-        
+        % TO DO: define which permuteUnit options are valid for mixed
+        % designs (both repeated and independent components). Until that
+        % logic exists, fail explicitly rather than silently accepting any
+        % permuteUnit value.
+        error(['\\ permuteUnit validation for mixed designs [1 1] is not yet implemented. ' ...
+            'Diagonale cannot yet guarantee a valid permutation scheme for designs with both ' ...
+            'repeated and independent components.'])
+
 end
 
 
