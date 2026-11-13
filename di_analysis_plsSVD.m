@@ -13,6 +13,23 @@ function results = di_analysis_plsSVD(di_cfg, Y_orig, X_orig, rowIdx)
 % used, only for significant modes, to identify original features of Y
 % (potentially of X too) that are stable under sampling variability.
 %
+% For readers new to SVD: the cross-covariance matrix C = X'Y/(m-1)
+% tabulates how every X variable co-varies with every Y feature. The SVD
+% factorises that table into a sum of rank-1 "modes", each consisting of a
+% pair of weight profiles (one over X variables: a column of U; one over Y
+% features: a column of V) plus a strength (the singular value). Modes are
+% ordered by strength and mutually orthogonal, so mode 1 is the single
+% strongest X-Y covariance pattern, mode 2 the strongest remaining one, and
+% so on. It is the same mathematical machinery behind PCA: PCA decomposes
+% one data block's covariance; PLS decomposes the BETWEEN-block covariance.
+%
+% References:
+%   McIntosh, A. R., & Lobaugh, N. J. (2004). Partial least squares analysis
+%     of neuroimaging data: applications and advances. NeuroImage, 23, S250-S263.
+%   Krishnan, A., Williams, L. J., McIntosh, A. R., & Abdi, H. (2011).
+%     Partial Least Squares (PLS) methods for neuroimaging: a tutorial and
+%     review. NeuroImage, 56(2), 455-475.
+%
 % notes:
 % 1. Y and X are always column-mean-centered at each iteration. Z-scoring
 % is optional and controlled by di_cfg.analysis.plssvdParams.zscoringVec.
@@ -44,6 +61,8 @@ function results = di_analysis_plsSVD(di_cfg, Y_orig, X_orig, rowIdx)
 %       .loadings.V_obs       (pY x nModes) Y-side loadings in Y-variable space
 %       .loadings.XU_obs      (m x nModes) X latent scores
 %       .loadings.YV_obs      (m x nModes) Y latent scores
+%       .loadings.U_corr_obs  (pX x nModes) correlation of each X variable with the X latent scores
+%       .loadings.V_corr_obs  (pY x nModes) correlation of each Y variable with the Y latent scores
 %
 %     .PLS_SVD      mode level
 %       .modes.nModes         number of extracted latent variables
@@ -62,6 +81,8 @@ function results = di_analysis_plsSVD(di_cfg, Y_orig, X_orig, rowIdx)
 %         .bootstrapStability.loadings.V_boot   (pY x nModes x nIterations)
 %         .bootstrapStability.loadings.XU_boot  (m x nModes x nIterations)
 %         .bootstrapStability.loadings.YV_boot  (m x nModes x nIterations)
+%         .bootstrapStability.loadings.U_corr_boot (pX x nModes x nIterations)
+%         .bootstrapStability.loadings.V_corr_boot (pY x nModes x nIterations)
 %
 % Author: Germano Gallicchio (germano.gallicchio@gmail.com)
 
@@ -292,6 +313,9 @@ for itIdx = 1:nIterations
             % for bootstrap with nModes>1, we also need to match direction across iterations.
             % This can easily be done through another SVD ("procrustes" rotation... terrible name)
             % (rotation is meaningless for a single mode, hence the gate)
+            % the rotation is computed from the X-side and Y-side loadings
+            % together, never from one block alone: see di_procrustesRotate
+            % for why one block cannot determine it
             if nModes > 1
                 [U, V] = di_procrustesRotate(U_ref, V_ref, U, V);
             end
@@ -302,6 +326,20 @@ for itIdx = 1:nIterations
     % metrics: projection of X and Y on each mode (i.e., latent scores)
     XU = Xz * U;    % X latent scores (one per mode)
     YV = Yz * V;    % Y latent scores (one per mode)
+
+    % metrics: correlation of each variable with its own latent scores
+    % (structure correlations). the loadings say what weight a variable
+    % receives when the latent variable is built; these say how strongly the
+    % variable tracks it once built. the two differ whenever the variables
+    % within a block are correlated with each other.
+    % computed here, after the alignment above, so they take the same
+    % orientation as the loadings and need no alignment of their own
+    U_corr = corr(Xz, XU);
+    % ignored features were set to zero above, so they have no variance and
+    % no defined correlation: compute the active ones, leave the rest NaN
+    activeCol = ~logical(di_cfg.analysis.ignore_col);
+    V_corr = nan(size(Y_orig,2), nModes);
+    V_corr(activeCol,:) = corr(Yz(:,activeCol), YV);
 
     % metrics: correlation between the two latent scores, per mode
     r = diag(corr(XU, YV)); % Pearson correlation between X and Y latent variables (i.e., scores = data * singular vectors) (one per mode)
@@ -319,6 +357,8 @@ for itIdx = 1:nIterations
         V_obs  = V;   % Y-side loadings (V singular vectors)
         XU_obs = XU;  % latent scores: X * singular vectors for X
         YV_obs = YV;  % latent scores: Y * singular vectors for Y
+        U_corr_obs = U_corr;  % structure correlations, X side
+        V_corr_obs = V_corr;  % structure correlations, Y side
         s_obs = s';   % as row (one per mode)
         p_obs = p';   % as row (one per mode)
         r_obs = r';   % as row (one per mode)
@@ -336,6 +376,16 @@ for itIdx = 1:nIterations
             end
 
             % fill each iteration
+            % "wilk" (Wilks-lambda-style residual spectrum):
+            %   wilk(k) = sum of s_j^2 for j >= k
+            % i.e. the squared cross-covariance NOT yet explained by modes
+            % 1..k-1. Comparing observed wilk(k) against its permutation
+            % distribution asks "is there any structure left from mode k
+            % onward?", which suits sequential mode testing better than
+            % testing s_k alone (later singular values are constrained by
+            % earlier ones). The name nods to Wilks' lambda, which likewise
+            % aggregates a residual eigenvalue spectrum; see the
+            % field-naming TO DO at the end of this file.
             resampling_s(itIdx, :)          = s';
             resampling_wilk(itIdx, :)       = flipud(cumsum(flipud(s(:).^2)))';
 
@@ -347,6 +397,8 @@ for itIdx = 1:nIterations
                 V_boot  = zeros(size(Y_orig,2),nModes,nIterations);
                 XU_boot = zeros(size(X_orig,1),nModes,nIterations);
                 YV_boot = zeros(size(Y_orig,1),nModes,nIterations);
+                U_corr_boot = zeros(size(X_orig,2),nModes,nIterations);
+                V_corr_boot = zeros(size(Y_orig,2),nModes,nIterations);
             end
 
             % fill each iteration
@@ -354,6 +406,8 @@ for itIdx = 1:nIterations
             V_boot(:,:,itIdx) = V;
             XU_boot(:,:,itIdx) = XU;
             YV_boot(:,:,itIdx) = YV;
+            U_corr_boot(:,:,itIdx) = U_corr;
+            V_corr_boot(:,:,itIdx) = V_corr;
     end
 
     di_counter(itIdx,nIterations)  % iteration counter
@@ -373,6 +427,8 @@ results.PLS_SVD.loadings.U_obs    = U_obs;          % (pX x nModes) X-side loadi
 results.PLS_SVD.loadings.V_obs    = V_obs;          % (pY x nModes) Y-side loadings in Y-variable space
 results.PLS_SVD.loadings.XU_obs   = XU_obs;         % (m x nModes) X latent scores
 results.PLS_SVD.loadings.YV_obs   = YV_obs;         % (m x nModes) Y latent scores
+results.PLS_SVD.loadings.U_corr_obs = U_corr_obs;   % (pX x nModes) correlation of each X variable with the X latent scores
+results.PLS_SVD.loadings.V_corr_obs = V_corr_obs;   % (pY x nModes) correlation of each Y variable with the Y latent scores
 
 % singular value level (overall latent variable metrics)
 results.PLS_SVD.modes.nModes   = nModes;         % number of latent variables
@@ -403,6 +459,8 @@ switch analysisObjective
         results.simulated.bootstrapStability.loadings.V_boot   = V_boot(:,:,:);   % (pY x nModes x nIterations)
         results.simulated.bootstrapStability.loadings.XU_boot  = XU_boot(:,:,:);  % (m x nModes x nIterations)
         results.simulated.bootstrapStability.loadings.YV_boot  = YV_boot(:,:,:);  % (m x nModes x nIterations)
+        results.simulated.bootstrapStability.loadings.U_corr_boot = U_corr_boot(:,:,:);  % (pX x nModes x nIterations)
+        results.simulated.bootstrapStability.loadings.V_corr_boot = V_corr_boot(:,:,:);  % (pY x nModes x nIterations)
 end
 
 % TO DO: the fields could reflect a more linear algebra language. "modes"
