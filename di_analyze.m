@@ -189,6 +189,18 @@ if strcmp(di_cfg.analysis.objective, 'permutationH0testing')
 end
 
 
+%% analysis identity announcement
+% derived from the validated configuration and ALWAYS printed (not gated on
+% verbose): this is the "check what you are running" moment, and the only
+% place silent defaults (e.g. Welch as the varianceType default) become
+% visible. If the line does not name the analysis you intended, the usual
+% culprit is a mis-built dataStruct - see di_testHelp.
+
+[summaryLabel, testLabel] = di_analysisSummary(di_cfg);
+di_cfg.analysis.testLabel    = testLabel;      % short name (quote in methods)
+di_cfg.analysis.summaryLabel = summaryLabel;   % the full line below
+fprintf('\\ Analysis: %s\n', summaryLabel);
+
 %% perform the analysis
 
 % get resampling indices
