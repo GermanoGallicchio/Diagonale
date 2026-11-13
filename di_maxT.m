@@ -47,7 +47,43 @@ function results = di_maxT(di_cfg,results)
 %
 % Note that the observed data is considered like a possible permutation (itIdx==1 is the observed/original)
 % so it is included in the null distribution.
-%        
+%
+% IMPORTANT: the feature-level family assumes a SCALE-FREE statistic.
+% maxT pools all features into one family and takes max(abs(.)) across them,
+% so the members must be on a comparable scale. A raw regression slope (beta)
+% is not: its permutation null SD is proportional to each Y column's SD, so
+% the threshold would be set by whichever features happen to have the largest
+% variance, and the result would not be invariant to per-feature rescaling of
+% Y. Use t or r (see di_cfg.analysis.OLS.inferenceStatistic, resolved in
+% di_validateOLS.m and applied in di_analysis_OLS.m). The same requirement
+% applies to cluster mass, which is a sum over cluster members.
+%
+% STEP-DOWN OPTION (feature level only):
+% di_cfg.analysis.maxT.stepDown = true activates the Westfall-Young
+% "free step-down" maxT (Westfall & Young, 1993). Algorithm:
+%   1. order features by decreasing |observed| statistic
+%   2. for each step j, the null distribution is the per-iteration maximum
+%      over the not-yet-rejected tail (features j..end in observed order)
+%   3. enforce monotonicity: p-values never decrease along the steps
+% Step-down p-values are never larger than their single-step counterparts
+% (the top feature's p-value is identical), and FWER control is retained
+% under subset pivotality, which is satisfied by the scale-free statistics
+% required above. (Subset pivotality: the joint null distribution of any
+% subset of the test statistics is the same whether or not the hypotheses
+% OUTSIDE that subset are true -- so removing already-rejected features
+% from the family does not distort the null of the remaining ones.)
+% Note: there is no single significance threshold under
+% step-down; .thresholds still reports the step-1 (full-family) threshold.
+% The method used is recorded in results.inference.feature.maxT_method
+% ('singleStep' or 'stepDown').
+% Step-down is feature level only (enforced in di_validateAnalysis.m and
+% guarded here): cluster identities do not persist across permutations
+% (step-down undefined), and latent modes lack a valid step-down null
+% without deflation (anti-conservative when mode 1 carries real signal).
+%
+% Reference: Westfall, P. H., & Young, S. S. (1993). Resampling-based
+% multiple testing: examples and methods for p-value adjustment. Wiley.
+%
 % Author: Germano Gallicchio (germano.gallicchio@gmail.com)
 
 %% shortcuts
@@ -58,6 +94,15 @@ p_crit = di_cfg.analysis.p_crit;
 
 
 inferenceLevel = di_cfg.analysis.inferenceLevel;
+
+% step-down maxT flag (feature level only; validated in di_validateAnalysis)
+stepDown = isfield(di_cfg.analysis,'maxT') && ...
+    isfield(di_cfg.analysis.maxT,'stepDown') && di_cfg.analysis.maxT.stepDown;
+if stepDown && ~strcmp(inferenceLevel,'feature')
+    error(['\\ di_cfg.analysis.maxT.stepDown = true is only supported for feature-level inference. ' ...
+        'Cluster identities do not persist across permutations (step-down undefined) and ' ...
+        'latent modes lack a valid step-down null without deflation.'])
+end
 
 switch inferenceLevel
     case 'feature'
@@ -182,7 +227,34 @@ for metIdx = 1:metrics_num
     thresholds.(varLbl) = prctile(H0distribution, 100*(1 - p_crit));
 
     % p-values: proportion of H0 maxima >= each observed |value|
-    if strcmp(inferenceLevel, 'feature')
+    if strcmp(inferenceLevel, 'feature') && stepDown
+        % Westfall-Young free step-down using the full null matrix.
+        % Observed data is iteration 1 (itIdx==1 convention), so row 1 of
+        % the null matrix holds the observed values and p >= 1/nIterations.
+        M = abs(statVal_null(:, feature_2use));   % [nIterations x nActiveFeatures]
+        obsActive = M(1, :);                      % observed |stat| per active feature
+        % NaN handling: features with NaN observed (or all-NaN null) get p = NaN;
+        % remaining NaN null entries never win a maximum
+        validActive = ~isnan(obsActive) & ~all(isnan(M), 1);
+        M(isnan(M)) = -Inf;
+        % step 1: order features by decreasing observed |stat|
+        [obsSorted, order] = sort(obsActive(validActive), 'descend');
+        Mv = M(:, validActive);
+        % step 2: per-iteration maximum over the not-yet-rejected tail
+        % Q(:,j) = max over features j..end (in observed order) at each iteration
+        Q = fliplr(cummax(fliplr(Mv(:, order)), 2));
+        pSorted = sum(Q >= obsSorted, 1) / nIterations;
+        % step 3: enforce monotonicity (a weaker feature can never have a
+        % smaller p-value than a stronger one)
+        pSorted = cummax(pSorted);
+        % map back: sorted -> valid-active -> active -> full feature vector
+        pvalsValid = nan(1, nnz(validActive));
+        pvalsValid(order) = pSorted;
+        pvalsActive = nan(size(obsActive));
+        pvalsActive(validActive) = pvalsValid;
+        pvals = nan(size(obsVal));
+        pvals(feature_2use) = pvalsActive;
+    elseif strcmp(inferenceLevel, 'feature')
         pvals = nan(size(obsVal));
         obsActive = obsVal(feature_2use);
         validActive = ~isnan(obsActive);
@@ -201,6 +273,11 @@ switch inferenceLevel
     case 'feature'
         results.inference.feature.pVal_corr = pval_maxT.statVal;
         results.inference.feature.thresholds = thresholds;
+        if stepDown
+            results.inference.feature.maxT_method = 'stepDown';
+        else
+            results.inference.feature.maxT_method = 'singleStep';
+        end
     case 'cluster'
         results.inference.cluster.pVal_maxT = pval_maxT;
         results.inference.cluster.thresholds = thresholds;
@@ -221,7 +298,11 @@ if di_cfg.analysis.figFlag  &&  nIterations>2
     tld = tiledlayout('flow');
     yLbl = ['num of simulated samples (out of ' num2str(nIterations) ' iterations)'];
     tld.YLabel.String = yLbl;
-    tld.Title.String = 'maxT null distribution';
+    if stepDown
+        tld.Title.String = 'maxT null distribution (step 1 of step-down)';
+    else
+        tld.Title.String = 'maxT null distribution';
+    end
     for metIdx = 1:metrics_num
         nexttile(tld);
 
