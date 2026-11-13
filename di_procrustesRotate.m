@@ -31,36 +31,36 @@ function [U_aligned, V_aligned] = di_procrustesRotate(U_obs, V_obs, U_boot, V_bo
 % (Frobenius norm), i.e. the best possible re-orientation of the bootstrap
 % mode subspace onto the observed one.
 %
-% why both blocks: a single T is applied to U and V, so it must be the one
-% that minimises misalignment for both of them at the same time. computing
-% it from one block only is not valid. the number of modes is min(pX,pY),
-% so the loading matrix of the smaller block is always square, and a square
-% matrix of orthonormal columns can be rotated exactly onto another one. a T
-% computed from that block alone would therefore map every bootstrap
-% iteration exactly onto the observed loadings: the variation across
-% iterations would be zero by construction, and the resulting stability
-% estimates would reflect this alignment step and not the data. stacking the
-% two blocks avoids this, because the stack has pX+pY rows for only
-% min(pX,pY) columns and is therefore never square.
+% why both blocks: the same T is applied to U and V, therefore it must be
+% the one that minimises the misalignment of both simultaneously. Computing
+% it from a single block would be a big problem. The number of modes is
+% min(pX,pY), so the loading matrix of the smaller block is always square,
+% and a square matrix of orthonormal columns can be rotated exactly onto
+% another one. A T obtained from that block alone would map every bootstrap
+% iteration exactly onto the observed loadings (i.e., zero variation across
+% iterations), therefore the resulting stability estimates would describe
+% this alignment step and not the data. Stacking the two blocks avoids this,
+% because the stack has pX+pY rows for only min(pX,pY) columns and is
+% therefore never square.
 %
 % note on reflections: T can be a reflection as well as a rotation.
-% resampling can flip the sign of a mode, and correcting those flips is part
-% of what this alignment is for; constraining T to rotations only would
-% leave some of them uncorrected.
+% Resampling can flip the sign of a mode, and correcting those flips is part
+% of what this alignment is for, therefore constraining T to rotations only
+% would leave some of them uncorrected.
 %
 % note on other implementations: McIntosh's PLS toolbox (pls_analysis.m,
 % through rri_bootprocrust) computes the rotation from one block and applies
-% it to the other, both for permutation and for bootstrap. this is not a
+% it to the other, both for permutation and for bootstrap. This is not a
 % problem there, because the ratios it reports are for the brain block,
-% which is large and keeps varying across iterations whatever the rotation
-% does, and because it resamples saliences already scaled by the singular
-% values rather than unit singular vectors. here either block can be the
-% smaller one and the loadings are unit singular vectors, so the rotation is
-% computed from both. a later variant (neuropm-lab/svd_pls) does use both
-% blocks, but averages a rotation obtained from each: the average of two
-% orthogonal matrices is not orthogonal, so what it applies is no longer a
-% rotation. summing the cross-products before the SVD, as below, keeps T
-% orthogonal.
+% which is large and keeps varying across iterations whichever rotation is
+% applied, and because it resamples saliences already scaled by the singular
+% values rather than unit singular vectors. Here either block can be the
+% smaller one and the loadings are unit singular vectors, therefore the
+% rotation is computed from both. A later variant (neuropm-lab/svd_pls) does
+% use both blocks, but averages a rotation obtained from each: the average
+% of two orthogonal matrices is not orthogonal, therefore what it applies is
+% not a rotation anymore. Summing the cross-products before the SVD, as
+% below, keeps T orthogonal.
 %
 % References:
 %   Schonemann, P. H. (1966). A generalized solution of the orthogonal
@@ -95,10 +95,10 @@ end
 %% implementation
 
 % 1. cross-product matrix of observed and bootstrapped loadings, from both
-% blocks. summing the two cross-products is the same as stacking the blocks,
-% [U; V], and taking one cross-product of the stack: it gives the single
-% rotation that minimises misalignment for X-side and Y-side loadings at the
-% same time
+% blocks. summing the two cross-products is the same as stacking the blocks
+% (i.e., [U; V]) and taking one cross-product of the stack, which gives the
+% single rotation that minimises the misalignment of X-side and Y-side
+% loadings simultaneously
 M = U_boot' * U_obs  +  V_boot' * V_obs;
 
 % 2. singular vectors via SVD
