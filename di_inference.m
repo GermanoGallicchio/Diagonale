@@ -352,13 +352,14 @@ switch key
         U_valid = abs(U_sd) > eps0;
         V_valid = abs(V_sd) > eps0;
         % loadings below tolerance have no meaningful variation across
-        % iterations to divide by, so no bootstrap ratio can be computed for
-        % them. warn instead of returning NaN silently: usually this means
-        % the loading is fixed by the geometry of the problem rather than
-        % estimated from the data (for example a block with a single
-        % variable, whose loading is always 1)
-        % features excluded via ignore_col have a zero loading in every
-        % iteration by construction, so they are not counted here
+        % iterations to divide by, therefore no bootstrap ratio can be
+        % computed for them. warn rather than returning NaN silently, which
+        % turns this failure mode into a loud one rather than a silent one:
+        % usually it means the loading is fixed by the geometry of the
+        % problem rather than estimated from the data (e.g., a block with a
+        % single variable, whose loading is always 1)
+        % features excluded via ignore_col have a zero loading at every
+        % iteration by definition, therefore they are not counted here
         V_counted = ~repmat(logical(di_cfg.analysis.ignore_col(:)), 1, size(V_sd,2));
         nFlat = sum(~U_valid(:)) + sum(~V_valid(V_counted));
         if nFlat > 0
@@ -400,11 +401,11 @@ switch key
 
         % STEP 5: Compute structure correlation metrics
         % correlations are bounded in [-1 1] and their bootstrap
-        % distribution is skewed near those bounds, so the ratio is formed
-        % on the atanh (Fisher z) scale, where the distribution is close to
-        % normal. the ratio stays on that scale: mapping it back through
-        % tanh would push everything above about 3 into values that cannot
-        % be told apart from 1.
+        % distribution is skewed near those bounds, therefore the ratio is
+        % formed on the atanh (Fisher z) scale, where that distribution is
+        % close to normal. the ratio is left on that scale: mapping it back
+        % through tanh would compress everything above about 3 into values
+        % that cannot be distinguished from 1.
         U_corr_obs  = results.PLS_SVD.loadings.U_corr_obs;
         V_corr_obs  = results.PLS_SVD.loadings.V_corr_obs;
         U_corr_boot = results.simulated.bootstrapStability.loadings.U_corr_boot;
@@ -415,9 +416,9 @@ switch key
         U_corr_BR = nan(size(U_corr_obs));
         V_corr_BR = nan(size(V_corr_obs));
         % a correlation of exactly +/-1 is infinite on the atanh scale. this
-        % happens by construction when a block holds a single variable,
-        % whose latent scores are that variable up to sign. ignored features
-        % are NaN here for the same reason they are NaN upstream
+        % happens when a block holds a single variable, whose latent scores
+        % are that variable up to sign. ignored features are NaN here for the
+        % same reason they are NaN upstream
         U_corr_valid = isfinite(U_corr_zsd) & U_corr_zsd > eps0 & isfinite(atanh(U_corr_obs));
         V_corr_valid = isfinite(V_corr_zsd) & V_corr_zsd > eps0 & isfinite(atanh(V_corr_obs));
         U_corr_BR(U_corr_valid) = atanh(U_corr_obs(U_corr_valid)) ./ U_corr_zsd(U_corr_valid);
@@ -427,9 +428,10 @@ switch key
         results.simulated.bootstrapStability.loadings.inference.U_corr_BR  = U_corr_BR;
         results.simulated.bootstrapStability.loadings.inference.V_corr_BR  = V_corr_BR;
 
-        % percentiles are unchanged by a monotone transform, so taking them
-        % on the atanh scale and mapping back through tanh would return
-        % exactly these numbers: compute them on the correlations directly
+        % percentiles are unchanged by a monotone transform, therefore
+        % taking them on the atanh scale and mapping back through tanh would
+        % return exactly these numbers: compute them on the correlations
+        % directly
         results.simulated.bootstrapStability.loadings.inference.U_corr_95CIlo = prctile(U_corr_boot, 2.5, 3);
         results.simulated.bootstrapStability.loadings.inference.U_corr_95CIup = prctile(U_corr_boot, 97.5, 3);
         results.simulated.bootstrapStability.loadings.inference.V_corr_95CIlo = prctile(V_corr_boot, 2.5, 3);
