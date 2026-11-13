@@ -406,32 +406,43 @@ switch key
         % close to normal. the ratio is left on that scale: mapping it back
         % through tanh would compress everything above about 3 into values
         % that are all very close to 1.
+        % shortcuts
         U_corr_obs  = results.PLS_SVD.loadings.U_corr_obs;
         V_corr_obs  = results.PLS_SVD.loadings.V_corr_obs;
         U_corr_boot = results.simulated.bootstrapStability.loadings.U_corr_boot;
         V_corr_boot = results.simulated.bootstrapStability.loadings.V_corr_boot;
 
-        U_corr_zsd = std(atanh(U_corr_boot), 0, 3);
-        V_corr_zsd = std(atanh(V_corr_boot), 0, 3);
+        % initialize
         U_corr_BR = nan(size(U_corr_obs));
         V_corr_BR = nan(size(V_corr_obs));
-        % a correlation of exactly +/-1 is infinite on the atanh scale. this
-        % happens when a block holds a single variable, whose latent scores
-        % are that variable up to sign. ignored features are NaN here for the
-        % same reason they are NaN in the loadings
+
+        % compute SD across iterations, on the atanh scale
+        U_corr_zsd = std(atanh(U_corr_boot), 0, 3);  % (pX x nModes)
+        V_corr_zsd = std(atanh(V_corr_boot), 0, 3);  % (pY x nModes)
+
+        % find idx of correlations with meaningful variation across
+        % iterations and finite on the atanh scale. a correlation of exactly
+        % +/-1 is infinite there, which happens when a block holds a single
+        % variable, whose latent scores are that variable up to sign.
+        % ignored features are NaN here for the same reason they are NaN in
+        % the loadings
         U_corr_valid = isfinite(U_corr_zsd) & U_corr_zsd > eps0 & isfinite(atanh(U_corr_obs));
         V_corr_valid = isfinite(V_corr_zsd) & V_corr_zsd > eps0 & isfinite(atanh(V_corr_obs));
+
+        % compute BR only for valid correlations
         U_corr_BR(U_corr_valid) = atanh(U_corr_obs(U_corr_valid)) ./ U_corr_zsd(U_corr_valid);
         V_corr_BR(V_corr_valid) = atanh(V_corr_obs(V_corr_valid)) ./ V_corr_zsd(V_corr_valid);
+
+        % store
         results.simulated.bootstrapStability.loadings.inference.U_corr_zsd = U_corr_zsd;
         results.simulated.bootstrapStability.loadings.inference.V_corr_zsd = V_corr_zsd;
         results.simulated.bootstrapStability.loadings.inference.U_corr_BR  = U_corr_BR;
         results.simulated.bootstrapStability.loadings.inference.V_corr_BR  = V_corr_BR;
 
-        % percentiles are unchanged by a monotone transform, therefore
-        % taking them on the atanh scale and mapping back through tanh would
-        % return exactly these numbers: compute them on the correlations
-        % directly
+        % confidence intervals (percentile method), computed on the
+        % correlation scale. percentiles are unchanged by a monotone
+        % transform, therefore taking them on the atanh scale and mapping
+        % back through tanh would return exactly these numbers
         results.simulated.bootstrapStability.loadings.inference.U_corr_95CIlo = prctile(U_corr_boot, 2.5, 3);
         results.simulated.bootstrapStability.loadings.inference.U_corr_95CIup = prctile(U_corr_boot, 97.5, 3);
         results.simulated.bootstrapStability.loadings.inference.V_corr_95CIlo = prctile(V_corr_boot, 2.5, 3);
