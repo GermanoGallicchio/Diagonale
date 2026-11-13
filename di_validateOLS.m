@@ -22,12 +22,18 @@ if ~isfield(di_cfg.analysis, 'OLS')
     di_cfg.analysis.OLS = struct();
 end
 
-if ~isfield(di_cfg.analysis.OLS, 'varianceType')
+% record whether the user supplied it BEFORE defaulting. Testing the value
+% after defaulting would never fire for a user who explicitly sets
+% 'unequal' on a non-[0 1] design, which is exactly the case worth warning
+% about.
+varianceType_userSupplied = isfield(di_cfg.analysis.OLS, 'varianceType');
+
+if ~varianceType_userSupplied
     di_cfg.analysis.OLS.varianceType = 'unequal';
 end
 
 % design-mismatch warning: varianceType only affects design [0 1] (Welch vs Student)
-if ~isequal(di_cfg.analysis.designCode, [0 1]) && ~strcmp(di_cfg.analysis.OLS.varianceType, 'unequal')
+if ~isequal(di_cfg.analysis.designCode, [0 1]) && varianceType_userSupplied
     warning('Diagonale:OLS', 'varianceType is only used for design [0 1]; ignored here');
 end
 
@@ -76,18 +82,27 @@ if strcmp(inferenceStatistic_resolved, 'r') && isequal(di_cfg.analysis.designCod
         'across features; the maxT family is not equivalent. Better choice: ''t''']);
 end
 
-% (B) 'beta' + permutationH0testing + correction 'maxT':
+% (B) 'beta' + permutationH0testing + a maxT family:
 % Bad one! Raw betas are not scale-free -- their permutation null SD is proportional
 % to each Y column's SD, so the maxT threshold is dominated by high-variance
 % features and results are not invariant to per-feature rescaling.
+%
+% A maxT family arises in TWO ways, not one:
+%   - correction = 'maxT' explicitly, or
+%   - inferenceLevel = 'cluster', because di_inference.m calls di_maxT
+%     unconditionally on the 'permutationH0testing + cluster' branch,
+%     whatever correction says.
 % di_cfg.analysis.correction does not exist under bootstrapStability
 % (di_validateAnalysis.m errors if it is set there), hence the isfield guard.
+isMaxTFamily = (isfield(di_cfg.analysis, 'correction') && strcmp(di_cfg.analysis.correction, 'maxT')) ...
+    || strcmp(di_cfg.analysis.inferenceLevel, 'cluster');
 if strcmp(inferenceStatistic_resolved, 'beta') && strcmp(di_cfg.analysis.objective, 'permutationH0testing') ...
-        && isfield(di_cfg.analysis, 'correction') && strcmp(di_cfg.analysis.correction, 'maxT')
-    warning('Diagonale:OLS', ['inferenceStatistic = ''beta'' with objective = ''permutationH0testing'' and correction = ''maxT'': ' ...
+        && isMaxTFamily
+    warning('Diagonale:OLS', ['inferenceStatistic = ''beta'' with objective = ''permutationH0testing'' and a maxT family ' ...
+        '(correction = ''maxT'' and/or inferenceLevel = ''cluster''): ' ...
         'raw betas are not scale-free! -- their permutation null SD is proportional to each Y column''s SD, ' ...
         'so the maxT threshold is dominated by high-variance features and results are not invariant to ' ...
-        'per-feature rescaling. Better choice: ''t''']);
+        'per-feature rescaling. Cluster mass is a sum over members and has the same problem. Better choice: ''t''']);
 end
 
 % (C) 't' or 'r' + bootstrapStability:
