@@ -16,10 +16,24 @@ function pval_emp_FDR = di_fdrPoolCorrect(pval_emp, ignore_col, dimSizes, poolDi
 %
 % notes: this is sent to another function that applies to BH procedure. this is just to prepare the p values
 %
+% NOTE ON DISCRETENESS (empirical p-values): permutation p-values have a
+% floor of 1/nIterations. The smallest Benjamini-Hochberg hurdle in a pool
+% of size L is p_crit/L, so if 1/nIterations > p_crit/L the rank-1 BH step
+% is unreachable and the correction is much more conservative than nominal.
+% Choose nIterations well above L/p_crit (L = pool size, i.e. pX for a
+% global pool). Confirmed by null simulation (tests/tier3_calibration.m):
+% nIterations=1000 with 100 features gave a realised rate of ~0.005 at
+% nominal 0.05.
+%
 % Author: Germano Gallicchio (germano.gallicchio@gmail.com)
 
 % initialize
 pval_emp_FDR = nan(1, numel(pval_emp));
+
+% accept dimSizes in either orientation. The header documents 1 x nDims;
+% the pipeline happens to pass a column (cellfun over fieldnames), and the
+% reshape below needs a definite orientation - so normalise here.
+dimSizes = dimSizes(:);
 
 % FDR pooling selection across dimensions (logical vector over all dims)
 % sanity check: num of FDR instructions match num of dimensions
