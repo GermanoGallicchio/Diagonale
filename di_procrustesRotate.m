@@ -32,16 +32,16 @@ function [U_aligned, V_aligned] = di_procrustesRotate(U_obs, V_obs, U_boot, V_bo
 % mode subspace onto the observed one.
 %
 % why both blocks: the same T is applied to U and V, therefore it must be
-% the one that minimises the misalignment of both simultaneously. Computing
-% it from a single block would be a big problem. The number of modes is
-% min(pX,pY), so the loading matrix of the smaller block is always square,
-% and a square matrix of orthonormal columns can be rotated exactly onto
-% another one. A T obtained from that block alone would map every bootstrap
-% iteration exactly onto the observed loadings (i.e., zero variation across
-% iterations), therefore the resulting stability estimates would describe
-% this alignment step and not the data. Stacking the two blocks avoids this,
-% because the stack has pX+pY rows for only min(pX,pY) columns and is
-% therefore never square.
+% the one that minimises the misalignment of both at the same time.
+% Computing it from a single block would be a big problem. The number of
+% modes is min(pX,pY), so the loading matrix of the smaller block is always
+% square, and a square matrix of orthonormal columns can be rotated exactly
+% onto another one. A T obtained from that block alone would map every
+% bootstrap iteration exactly onto the observed loadings (i.e., zero
+% variation across iterations), therefore the resulting stability estimates
+% would describe this alignment step and not the data. Stacking the two
+% blocks avoids this, because the stack has pX+pY rows for only min(pX,pY)
+% columns and is therefore never square.
 %
 % note on reflections: T can be a reflection as well as a rotation.
 % Resampling can flip the sign of a mode, and correcting those flips is part
@@ -52,9 +52,10 @@ function [U_aligned, V_aligned] = di_procrustesRotate(U_obs, V_obs, U_boot, V_bo
 % through rri_bootprocrust) computes the rotation from one block and applies
 % it to the other, both for permutation and for bootstrap. This is not a
 % problem there, because the ratios it reports are for the brain block,
-% which is large and keeps varying across iterations whichever rotation is
-% applied, and because it resamples saliences already scaled by the singular
-% values rather than unit singular vectors. Here either block can be the
+% which is large and keeps varying across iterations no matter which
+% rotation is applied, and because it resamples saliences already scaled by
+% the singular values rather than unit singular vectors. Here either block
+% can be the
 % smaller one and the loadings are unit singular vectors, therefore the
 % rotation is computed from both. A later variant (neuropm-lab/svd_pls) does
 % use both blocks, but averages a rotation obtained from each: the average
@@ -98,7 +99,7 @@ end
 % blocks. summing the two cross-products is the same as stacking the blocks
 % (i.e., [U; V]) and taking one cross-product of the stack, which gives the
 % single rotation that minimises the misalignment of X-side and Y-side
-% loadings simultaneously
+% loadings at the same time
 M = U_boot' * U_obs  +  V_boot' * V_obs;
 
 % 2. singular vectors via SVD
